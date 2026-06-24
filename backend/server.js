@@ -8,6 +8,7 @@ require('dotenv').config();
 
 const authRoutes = require('./routes/authRoutes');
 const productRoutes = require('./routes/productRoutes');
+const orderRoutes = require('./routes/orderRoutes');
 
 const app = express();
 
@@ -38,9 +39,10 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/orders', orderRoutes);
 
 app.get('/', (req, res) => {
-    res.json({ status: "success", message: "NIBM Canteen-Zero API is active" });
+    res.json({ status: "success", message: "NIBM Canteen-Zero API Active" });
 });
 
 app.use((err, req, res, next) => {
@@ -53,10 +55,10 @@ app.use((err, req, res, next) => {
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/nibm_canteen_db';
 mongoose.connect(MONGO_URI)
-    .then(() => console.log("✅ Database Connected Successfully"))
+    .then(() => console.log("✅ Database Connected"))
     .catch((err) => console.error("❌ DB Connection Error:", err.message));
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-    console.log(`🚀 Production Server active on http://localhost:${PORT}`);
+    console.log(`🚀 Production Server on http://localhost:${PORT}`);
 });

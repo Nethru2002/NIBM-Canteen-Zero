@@ -1,14 +1,22 @@
 import React from 'react';
+import { useCartStore } from '../store/useCartStore';
 
 const ProductCard = ({ product, index }) => {
+    const addToCart = useCartStore((state) => state.addToCart);
+    const toggleCart = useCartStore((state) => state.toggleCart);
+
     const fallbackImage = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=400";
+
+    const handleAdd = () => {
+        addToCart(product);
+        toggleCart();
+    };
 
     return (
         <div 
             className="group bg-white rounded-[2.5rem] p-3 shadow-premium border border-gray-100 hover:-translate-y-2 transition-all duration-500 animate-fade-in-up"
             style={{ animationDelay: `${index * 100}ms` }}
         >
-
             <div className="relative h-52 w-full overflow-hidden rounded-[2rem] bg-gray-50">
                 <img 
                     src={product.image} 
@@ -47,7 +55,7 @@ const ProductCard = ({ product, index }) => {
                     </div>
                 </div>
                 
-                <div className="flex gap-0.5 mb-4">
+                <div className="flex gap-0.5 mb-3">
                     {[...Array(3)].map((_, i) => (
                         <span 
                             key={i} 
@@ -58,15 +66,15 @@ const ProductCard = ({ product, index }) => {
                     ))}
                 </div>
                 
-                <p className="text-gray-400 text-xs font-medium mb-6 line-clamp-2 leading-relaxed h-8">
+                <p className="text-slate-600 text-sm font-medium mb-6 line-clamp-2 leading-relaxed min-h-[40px]">
                     {product.description}
                 </p>
                 
                 <button 
-                    className="w-full bg-nibmBlue text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-900/20 group-hover:bg-nibmRed transition-all duration-300 transform active:scale-95 flex items-center justify-center gap-2"
-                    onClick={() => console.log(`US 08: Adding ${product.name} to basket`)}
+                    onClick={handleAdd}
+                    className="w-full bg-nibmBlue text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-900/20 group-hover:bg-nibmRed transition-all duration-300 transform active:scale-95 flex items-center justify-center gap-2"
                 >
-                    <span className="text-[10px] tracking-[0.2em] font-black uppercase">
+                    <span className="text-[10px] tracking-[0.2em] uppercase">
                         Add to Basket
                     </span>
                 </button>

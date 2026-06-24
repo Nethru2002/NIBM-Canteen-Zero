@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import toast from 'react-hot-toast';
+import API from '../services/api';
 import LoginForm from '../components/LoginForm';
 
 const Login = () => {
@@ -10,12 +11,14 @@ const Login = () => {
         setLoading(true);
         setError('');
         try {
-            const response = await axios.post(`${process.env.REACT_APP_API_URL}/api/auth/login`, { email, password });
+            const response = await API.post('/api/auth/login', { email, password });
             
             const { token, user } = response.data;
             localStorage.setItem('token', token);
             localStorage.setItem('userName', user.name);
             localStorage.setItem('userRole', user.role); 
+
+            toast.success(`Welcome back, ${user.name}`);
 
             if (user.role === 'admin') {
                 window.location.href = '/admin/dashboard';
@@ -23,7 +26,9 @@ const Login = () => {
                 window.location.href = '/menu';
             }
         } catch (err) {
-            setError(err.response?.data?.message || 'Authentication failed. Please check credentials.');
+            const msg = err.response?.data?.message || 'Authentication failed';
+            setError(msg);
+            toast.error(msg);
         } finally { 
             setLoading(false); 
         }
@@ -34,7 +39,7 @@ const Login = () => {
             
             <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
                 <div className="absolute top-[-5%] left-[-5%] w-[500px] h-[500px] bg-nibmGold opacity-20 rounded-full blur-[120px]"></div>
-                <div className="absolute bottom-[5%] right-[-5%] w-[500px] h-[500px] bg-nibmBlue opacity-10 rounded-full blur-[120px]"></div>
+                <div className="absolute bottom-[5%] right-[5%] w-[500px] h-[500px] bg-nibmBlue opacity-10 rounded-full blur-[120px]"></div>
             </div>
 
             <div className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-[0_30px_70px_rgba(11,61,145,0.15)] border border-white/60 overflow-hidden z-20 animate-in fade-in zoom-in duration-500">

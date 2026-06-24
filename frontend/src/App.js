@@ -1,10 +1,10 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-
 import Login from './pages/Login';
 import Menu from './pages/Menu';
 import AdminDashboard from './pages/AdminDashboard';
+import Checkout from './pages/Checkout';
 
 const AdminRoute = ({ children }) => {
   const token = localStorage.getItem('token');
@@ -33,11 +33,11 @@ function App() {
             }
         }}
       />
-
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/menu" element={<Menu />} />   
+        <Route path="/menu" element={<Menu />} />
+        <Route path="/checkout" element={<Checkout />} />
         <Route 
           path="/admin/dashboard" 
           element={
@@ -46,7 +46,6 @@ function App() {
             </AdminRoute>
           } 
         />
-        
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>
