@@ -1,16 +1,26 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+
 import Login from './pages/Login';
 import Menu from './pages/Menu';
 import AdminDashboard from './pages/AdminDashboard';
 import Checkout from './pages/Checkout';
+import Profile from './pages/Profile';
 
 const AdminRoute = ({ children }) => {
   const token = localStorage.getItem('token');
   const userRole = localStorage.getItem('userRole');
 
   if (!token || userRole !== 'admin') {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+};
+
+const ProtectedRoute = ({ children }) => {
+  const token = localStorage.getItem('token');
+  if (!token) {
     return <Navigate to="/login" replace />;
   }
   return children;
@@ -36,8 +46,34 @@ function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/menu" element={<Menu />} />
-        <Route path="/checkout" element={<Checkout />} />
+        
+        <Route 
+          path="/menu" 
+          element={
+            <ProtectedRoute>
+              <Menu />
+            </ProtectedRoute>
+          } 
+        />
+        
+        <Route 
+          path="/checkout" 
+          element={
+            <ProtectedRoute>
+              <Checkout />
+            </ProtectedRoute>
+          } 
+        />
+
+        <Route 
+          path="/profile" 
+          element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          } 
+        />
+
         <Route 
           path="/admin/dashboard" 
           element={
@@ -46,6 +82,7 @@ function App() {
             </AdminRoute>
           } 
         />
+
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>
