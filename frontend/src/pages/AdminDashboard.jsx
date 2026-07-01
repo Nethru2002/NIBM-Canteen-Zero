@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import { 
     PackagePlus, Clock, BadgeDollarSign, Flame, Utensils, 
     ArrowLeft, Upload, CheckCircle2, Eye, ClipboardCheck, 
-    Power, Search, CalendarDays, RotateCcw, Edit3, Trash2, X, ShoppingBag
+    Power, Search, CalendarDays, RotateCcw, Edit3, Trash2, X, ShoppingBag, ChefHat
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import API from '../services/api';
@@ -45,7 +45,7 @@ const AdminDashboard = () => {
             const res = await API.get('/api/products/admin-list');
             setInventory(res.data);
         } catch (err) { 
-            toast.error("Inventory sync failed"); 
+            toast.error("Database out of sync"); 
         }
     }, []);
 
@@ -54,7 +54,7 @@ const AdminDashboard = () => {
             const res = await API.get('/api/orders/admin/active');
             setPendingOrders(res.data);
         } catch (err) {
-            console.error("Order sync failed");
+            console.error("Order stream failed");
         }
     }, []);
 
@@ -68,7 +68,7 @@ const AdminDashboard = () => {
     const handleCollect = async (id) => {
         try {
             await API.patch(`/api/orders/${id}/collect`);
-            toast.success("Order Handed Over");
+            toast.success("Pickup verified");
             fetchOrders();
         } catch (err) {
             toast.error("Update failed");
@@ -84,6 +84,7 @@ const AdminDashboard = () => {
         });
         setPreviewUrl(item.image);
         setImageFile(null);
+        toast(`Modifying ${item.name}`, { icon: '⚙️' });
     };
 
     const cancelEdit = () => {
@@ -95,12 +96,13 @@ const AdminDashboard = () => {
     };
 
     const handleDelete = async (id, name) => {
-        if (window.confirm(`Delete ${name}?`)) {
+        if (window.confirm(`Permanently remove ${name} from catalog?`)) {
             try {
                 await API.delete(`/api/products/${id}`);
                 fetchInventory();
-                toast.success("Removed");
-            } catch (err) { toast.error("Fail"); }
+                toast.success("Inventory Updated");
+                if (editId === id) cancelEdit();
+            } catch (err) { toast.error("Process failed"); }
         }
     };
 
@@ -108,20 +110,21 @@ const AdminDashboard = () => {
         try {
             await API.patch(`/api/products/${id}/toggle`);
             fetchInventory();
-        } catch (err) { toast.error("Fail"); }
+            toast.success("Availability switched");
+        } catch (err) { toast.error("Toggle error"); }
     };
 
     const handleGlobalReset = async () => {
-        if(window.confirm("Restore all items to Available?")) {
+        if(window.confirm("Restore all items to Available for today?")) {
             await API.post('/api/products/daily-reset');
             fetchInventory();
-            toast.success("Reset Complete");
+            toast.success("New Session Initialized");
         }
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!imageFile && !isEditing) return toast.error("Image required");
+        if (!imageFile && !isEditing) return toast.error("Product visual required");
         setLoading(true);
         const data = new FormData();
         if (imageFile) data.append('image', imageFile);
@@ -131,7 +134,8 @@ const AdminDashboard = () => {
             else await API.post('/api/products', data);
             fetchInventory();
             cancelEdit();
-        } catch (err) { toast.error("Error"); }
+            toast.success("Catalog Synchronized");
+        } catch (err) { toast.error("Database Error"); }
         finally { setLoading(false); }
     };
 
@@ -144,34 +148,41 @@ const AdminDashboard = () => {
                             <ArrowLeft size={20} />
                         </Link>
                         <div>
-                            <h1 className="text-2xl font-black tracking-tighter uppercase leading-none">Canteen Switchboard</h1>
+                            <h1 className="text-2xl font-black tracking-tighter uppercase leading-none">Inventory Manager</h1>
                             <p className="text-blue-200 text-[9px] font-bold tracking-[0.3em] uppercase mt-1 opacity-70">Admin Terminal</p>
                         </div>
                     </div>
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-300" size={14} />
-                        <input type="text" placeholder="Search..." className="bg-blue-900/40 border border-blue-400/30 rounded-full pl-9 pr-4 py-2 text-xs outline-none focus:ring-2 focus:ring-nibmGold w-48 transition-all" onChange={(e) => setSearchBar(e.target.value)}/>
+                    <div className="flex items-center gap-4">
+                        <Link to="/admin/kitchen" className="flex items-center gap-3 bg-white/10 border border-white/20 px-6 py-3 rounded-2xl hover:bg-white/20 transition-all group">
+                            <div className="text-right hidden md:block leading-none">
+                                <p className="text-[8px] font-black uppercase tracking-widest opacity-50 mb-1">Switch Mode</p>
+                                <p className="text-xs font-black uppercase tracking-tighter text-nibmGold">Kitchen Monitor</p>
+                            </div>
+                            <ChefHat className="text-nibmGold group-hover:scale-110 transition-transform" size={24} />
+                        </Link>
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-300" size={14} />
+                            <input type="text" placeholder="Search..." className="bg-blue-900/40 border border-blue-400/30 rounded-full pl-9 pr-4 py-2 text-xs outline-none focus:ring-2 focus:ring-nibmGold w-40 transition-all" onChange={(e) => setSearchBar(e.target.value)}/>
+                        </div>
                     </div>
                 </div>
 
                 <div className="bg-white border-b border-gray-100 p-4 flex justify-between items-center px-8 shadow-sm">
-                    <div className="flex items-center gap-3">
-                        <CalendarDays size={16} className="text-nibmBlue" />
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">
-                            Session: {new Date().toLocaleDateString('en-GB')}
-                        </span>
+                    <div className="flex items-center gap-3 text-slate-400">
+                        <CalendarDays size={16} />
+                        <span className="text-[10px] font-black uppercase tracking-widest leading-none">Session: {new Date().toLocaleDateString('en-GB')}</span>
                     </div>
-                    <button onClick={handleGlobalReset} className="flex items-center gap-2 bg-slate-100 text-nibmBlue px-4 py-2 rounded-xl hover:bg-nibmGold transition-all font-black text-[9px] uppercase tracking-widest border border-slate-200"><RotateCcw size={12} /> Global Reset</button>
+                    <button onClick={handleGlobalReset} className="flex items-center gap-2 bg-slate-100 text-nibmBlue px-4 py-2 rounded-xl hover:bg-nibmGold transition-all font-black text-[9px] uppercase tracking-widest border border-slate-200 shadow-sm"><RotateCcw size={12} /> Global Inventory Reset</button>
                 </div>
 
-                <div className="p-8 overflow-y-auto no-scrollbar flex-1 space-y-8 pb-24">
+                <div className="p-8 overflow-y-auto no-scrollbar flex-1 space-y-8 pb-32">
                     <div>
                         <div className="flex items-center justify-between mb-6">
                             <h2 className="text-sm font-black text-nibmBlue uppercase tracking-widest flex items-center gap-2"><ShoppingBag size={16}/> Pending Pickups</h2>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {pendingOrders.map(order => (
-                                <div key={order._id} className="bg-nibmGold p-5 rounded-[2rem] flex justify-between items-center shadow-lg shadow-yellow-100 border border-white/50 animate-in fade-in zoom-in duration-300">
+                                <div key={order._id} className="bg-nibmGold p-5 rounded-[2.5rem] flex justify-between items-center shadow-lg shadow-yellow-100 border border-white/50 animate-in fade-in zoom-in duration-300">
                                     <div className="flex items-center gap-4">
                                         <span className="text-4xl font-black text-nibmBlue leading-none">{order.tokenID}</span>
                                         <div className="flex flex-col">
@@ -179,10 +190,10 @@ const AdminDashboard = () => {
                                             <span className="text-[10px] font-bold text-nibmRed uppercase mt-1">{order.items.length} Items</span>
                                         </div>
                                     </div>
-                                    <button onClick={() => handleCollect(order._id)} className="bg-nibmBlue text-white p-3 rounded-2xl hover:bg-slate-900 transition-all"><CheckCircle2 size={20}/></button>
+                                    <button onClick={() => handleCollect(order._id)} className="bg-nibmBlue text-white p-3 rounded-2xl hover:bg-slate-900 transition-all shadow-lg"><CheckCircle2 size={20}/></button>
                                 </div>
                             ))}
-                            {pendingOrders.length === 0 && <p className="col-span-full text-center py-10 text-[10px] font-black text-gray-300 uppercase tracking-[0.4em]">No pending orders</p>}
+                            {pendingOrders.length === 0 && <p className="col-span-full text-center py-10 text-[10px] font-black text-gray-300 uppercase tracking-[0.4em]">No orders in queue</p>}
                         </div>
                     </div>
 
@@ -192,7 +203,7 @@ const AdminDashboard = () => {
                             {inventory.filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase())).map(item => (
                                 <div key={item._id} className={`flex items-center justify-between p-5 rounded-[2rem] border transition-all ${item.isAvailable ? 'bg-white border-gray-100 shadow-sm' : 'bg-gray-100 border-dashed border-gray-300 opacity-60'}`}>
                                     <div className="flex items-center gap-5">
-                                        <img src={item.image} className="w-14 h-14 rounded-2xl object-cover shadow-inner bg-gray-50" alt="" />
+                                        <img src={item.image} className="w-14 h-14 rounded-2xl object-cover shadow-inner bg-gray-50 border border-gray-100" alt="" />
                                         <div>
                                             <h3 className="font-bold text-gray-800 text-sm">{item.name}</h3>
                                             <div className="flex gap-2 mt-1">
@@ -201,10 +212,10 @@ const AdminDashboard = () => {
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-2">
                                         <button onClick={() => handleEditClick(item)} className="p-2.5 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"><Edit3 size={16}/></button>
                                         <button onClick={() => handleDelete(item._id, item.name)} className="p-2.5 text-nibmRed hover:bg-red-50 rounded-xl transition-all"><Trash2 size={16}/></button>
-                                        <button onClick={() => handleToggle(item._id)} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-[10px] tracking-widest uppercase transition-all ${item.isAvailable ? 'bg-green-100 text-green-600' : 'bg-slate-200 text-slate-500'}`}><Power size={14} /></button>
+                                        <button onClick={() => handleToggle(item._id)} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-[10px] tracking-widest uppercase transition-all ${item.isAvailable ? 'bg-green-100 text-green-600 hover:bg-green-600 hover:text-white' : 'bg-slate-200 text-slate-500'}`}><Power size={14} /></button>
                                     </div>
                                 </div>
                             ))}
@@ -216,18 +227,20 @@ const AdminDashboard = () => {
             <div className={`w-full md:w-[40%] bg-white shadow-[-20px_0_60px_rgba(0,0,0,0.03)] flex flex-col z-20 transition-all ${isEditing ? 'border-l-4 border-nibmGold' : ''}`}>
                 <div className="p-10 text-center border-b border-gray-50 relative">
                     {isEditing && <button onClick={cancelEdit} className="absolute left-6 top-1/2 -translate-y-1/2 p-2 hover:bg-gray-100 rounded-full text-gray-400 transition-all"><X size={18}/></button>}
-                    <PackagePlus size={32} className={`mx-auto mb-2 ${isEditing ? 'text-nibmGold' : 'text-blue-200'}`} />
-                    <h2 className="text-xl font-black text-nibmBlue tracking-widest uppercase leading-none">{isEditing ? 'Update Entry' : 'Catalog Entry'}</h2>
+                    <div className={`w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center shadow-lg transition-all ${isEditing ? 'bg-nibmGold text-nibmBlue scale-110' : 'bg-slate-100 text-slate-300'}`}>
+                        <PackagePlus size={24} />
+                    </div>
+                    <h2 className="text-xl font-black text-nibmBlue tracking-widest uppercase leading-none">{isEditing ? 'Update Selection' : 'Catalog Entry'}</h2>
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-10 space-y-6 overflow-hidden flex-1">
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1.5">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Name</label>
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Product Name</label>
                             <input type="text" name="name" required className="w-full bg-gray-50 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-nibmBlue text-sm font-medium" value={formData.name} onChange={handleChange} />
                         </div>
                         <div className="space-y-1.5">
-                            <label className="flex items-center gap-1.5 text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1"><Utensils size={12}/> Category</label>
+                            <label className="flex items-center gap-1.5 text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1"><Utensils size={12} className="text-nibmBlue"/> Category</label>
                             <select name="category" className="w-full bg-gray-50 p-4 rounded-2xl outline-none font-bold text-nibmBlue text-sm appearance-none" value={formData.category} onChange={handleChange}>
                                 <option value="Snacks">Snacks</option>
                                 <option value="Main Meals">Main Meals</option>
@@ -238,54 +251,54 @@ const AdminDashboard = () => {
                     </div>
 
                     <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Description</label>
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Marketing Description</label>
                         <textarea name="description" rows="2" required className="w-full bg-gray-50 p-4 rounded-2xl outline-none text-sm resize-none font-medium text-gray-600" value={formData.description} onChange={handleChange} />
                     </div>
 
                     <div className="grid grid-cols-3 gap-4">
                         <div className="space-y-1.5">
-                            <label className="flex items-center gap-1.5 text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1"><BadgeDollarSign size={12}/> Price</label>
+                            <label className="flex items-center gap-1.5 text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1"><BadgeDollarSign size={12} className="text-nibmBlue"/> Price</label>
                             <input type="number" name="price" className="w-full bg-gray-50 p-4 rounded-2xl text-center font-black text-nibmBlue" value={formData.price} onChange={handleChange} />
                         </div>
                         <div className="space-y-1.5">
-                            <label className="flex items-center gap-1.5 text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1"><Clock size={12}/> Prep</label>
+                            <label className="flex items-center gap-1.5 text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1"><Clock size={12} className="text-nibmBlue"/> Prep</label>
                             <input type="number" name="prepTime" className="w-full bg-gray-50 p-4 rounded-2xl text-center font-black text-nibmBlue" value={formData.prepTime} onChange={handleChange} />
                         </div>
                         <div className="space-y-1.5 flex flex-col items-center">
-                            <label className="flex items-center gap-1.5 text-[10px] font-black text-gray-400 uppercase tracking-wider"><Flame size={12}/> Spice</label>
+                            <label className="flex items-center gap-1.5 text-[10px] font-black text-gray-400 uppercase tracking-wider"><Flame size={12} className="text-nibmRed"/> Spice</label>
                             <div className="flex gap-1.5 mt-3">
-                                {[1, 2, 3].map(i => <button key={i} type="button" onClick={() => handleSpiceClick(i)} className={`text-sm transition-all ${formData.spiceLevel >= i ? 'scale-125' : 'opacity-10 grayscale'}`}>🌶️</button>)}
+                                {[1, 2, 3].map(i => <button key={i} type="button" onClick={() => handleSpiceClick(i)} className={`text-sm transition-all ${formData.spiceLevel >= i ? 'scale-125 opacity-100' : 'opacity-10 grayscale'}`}>🌶️</button>)}
                             </div>
                         </div>
                     </div>
 
                     <div className="flex gap-4">
                         <div className="flex-1 space-y-1.5">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Media</label>
-                            <button type="button" onClick={() => fileInputRef.current.click()} className={`w-full border-2 border-dashed p-4 rounded-2xl font-bold text-[10px] tracking-widest uppercase flex items-center justify-center gap-2 transition-all ${imageFile ? 'bg-blue-600 border-blue-600 text-white' : 'bg-blue-50 border-blue-100 text-blue-600'}`}>
-                                <Upload size={14} /> {imageFile ? 'Attached' : isEditing ? 'Update' : 'Upload'}
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Media Asset</label>
+                            <button type="button" onClick={() => fileInputRef.current.click()} className={`w-full border-2 border-dashed p-4 rounded-2xl font-bold text-[10px] tracking-widest uppercase flex items-center justify-center gap-2 transition-all ${imageFile ? 'bg-blue-600 border-blue-600 text-white shadow-lg' : 'bg-blue-50 border-blue-100 text-blue-600'}`}>
+                                <Upload size={14} /> {imageFile ? 'Source Attached' : isEditing ? 'Change Visual' : 'Upload Image'}
                             </button>
                             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
                         </div>
                         <div className="space-y-1.5 text-center">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Type</label>
-                            <button type="button" onClick={() => setFormData(prev => ({...prev, isVeg: !prev.isVeg}))} className={`h-[52px] px-6 rounded-2xl font-black text-[10px] tracking-widest uppercase border-2 transition-all flex items-center gap-2 ${formData.isVeg ? 'bg-green-600 border-green-600 text-white' : 'bg-white border-gray-100 text-gray-400'}`}>
-                                Veg
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Type</label>
+                            <button type="button" onClick={() => setFormData(prev => ({...prev, isVeg: !prev.isVeg}))} className={`h-[52px] px-6 rounded-2xl font-black text-[10px] tracking-widest uppercase border-2 transition-all flex items-center gap-2 shadow-sm ${formData.isVeg ? 'bg-green-600 border-green-600 text-white shadow-green-100' : 'bg-white border-gray-100 text-gray-400'}`}>
+                                {formData.isVeg && <CheckCircle2 size={14} />} Veg
                             </button>
                         </div>
                     </div>
 
-                    <button type="submit" disabled={loading} className={`w-full text-white font-black py-5 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3 uppercase tracking-widest ${isEditing ? 'bg-nibmGold hover:bg-yellow-500' : 'bg-nibmRed hover:bg-red-700'}`}>
-                        {loading ? <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span> : <><ClipboardCheck size={20} /> {isEditing ? 'Save' : 'Commit'}</>}
+                    <button type="submit" disabled={loading} className={`w-full text-white font-black py-5 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3 uppercase tracking-widest ${isEditing ? 'bg-nibmGold hover:bg-yellow-500 shadow-yellow-100' : 'bg-nibmRed hover:bg-red-700 shadow-red-100'}`}>
+                        {loading ? <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span> : <><ClipboardCheck size={20} /> {isEditing ? 'Commit Changes' : 'Post to Catalog'}</>}
                     </button>
 
                     {previewUrl && (
-                        <div className="mt-4 p-4 bg-slate-50 rounded-[2rem] border border-gray-100 flex flex-col items-center">
-                            <div className="flex items-center gap-2 text-gray-300 mb-3">
+                        <div className="mt-4 p-4 bg-slate-50 rounded-[2rem] border border-gray-100 flex flex-col items-center shadow-inner">
+                            <div className="flex items-center gap-2 text-gray-400 mb-3 leading-none">
                                 <Eye size={14} />
-                                <span className="text-[9px] font-black uppercase tracking-widest leading-none">Visual Check</span>
+                                <span className="text-[9px] font-black uppercase tracking-widest leading-none">Visual Integrity Check</span>
                             </div>
-                            <img src={previewUrl} className="w-full h-32 object-cover rounded-2xl shadow-sm border border-white" alt="" />
+                            <img src={previewUrl} className="w-full h-32 object-cover rounded-2xl shadow-md border-2 border-white" alt="" />
                         </div>
                     )}
                 </form>

@@ -4,8 +4,9 @@ import API from '../services/api';
 import ProductCard from '../components/ProductCard';
 import CartDrawer from '../components/CartDrawer';
 import { useCartStore } from '../store/useCartStore';
-import { X, LogOut, Settings, ChevronLeft, ChevronRight, ListFilter, ArrowDownUp } from 'lucide-react';
+import { X, LogOut, Settings, ChevronLeft, ChevronRight, ListFilter, ArrowDownUp, BellRing, ChefHat, LayoutDashboard } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { io } from 'socket.io-client';
 
 const Menu = () => {
     const [products, setProducts] = useState([]);
@@ -30,21 +31,13 @@ const Menu = () => {
         navigate('/login');
     };
 
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (profileRef.current && !profileRef.current.contains(event.target)) setIsProfileOpen(false);
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
+    const handleNextToken = () => {
+        setTokenIndex((prev) => (prev + 1) % activeOrders.length);
+    };
 
-    const fetchProducts = useCallback(async () => {
-        try {
-            const res = await API.get('/api/products');
-            setProducts(res.data);
-        } catch (err) { console.error("Sync Error"); }
-        finally { setLoading(false); }
-    }, []);
+    const handlePrevToken = () => {
+        setTokenIndex((prev) => (prev - 1 + activeOrders.length) % activeOrders.length);
+    };
 
     const fetchActiveOrders = useCallback(async () => {
         const token = localStorage.getItem('token');
@@ -53,16 +46,64 @@ const Menu = () => {
                 const decoded = JSON.parse(atob(token.split('.')[1]));
                 const res = await API.get(`/api/orders/user/${decoded.id}`);
                 setActiveOrders(res.data);
-            } catch (err) { console.error("Recovery Error"); }
+            } catch (err) { 
+                console.error("Recovery Error"); 
+            }
         }
     }, []);
 
     useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (profileRef.current && !profileRef.current.contains(event.target)) setIsProfileOpen(false);
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    useEffect(() => {
+        const socket = io("http://localhost:5000");
+        const token = localStorage.getItem('token');
+        const userId = token ? JSON.parse(atob(token.split('.')[1])).id : null;
+
+        socket.on('orderUpdate', (data) => {
+            if (data.userId === userId) {
+                fetchActiveOrders();
+                if (data.status === 'Ready') {
+                    toast.success("Order Ready for Pickup!", { icon: '🔔', duration: 6000 });
+                    setShowTokenWidget(true);
+                }
+                if (data.status === 'Preparing') {
+                    toast("Chef is preparing your order", { icon: '👨‍🍳' });
+                }
+            }
+        });
+
+        return () => socket.disconnect();
+    }, [fetchActiveOrders]);
+
+    useEffect(() => {
+        const fetchProducts = async () => {
+            try {
+                const res = await API.get('/api/products');
+                setProducts(res.data);
+            } catch (err) { 
+                console.error("Sync Error"); 
+            } finally { 
+                setLoading(false); 
+            }
+        };
         fetchProducts();
         fetchActiveOrders();
-        const interval = setInterval(fetchActiveOrders, 10000);
-        return () => clearInterval(interval);
-    }, [fetchProducts, fetchActiveOrders]);
+    }, [fetchActiveOrders]);
+
+    const getStatusLabel = (status) => {
+        switch (status) {
+            case 'Paid': return 'Awaiting Cook';
+            case 'Preparing': return 'In Preparation';
+            case 'Ready': return 'Ready for Pickup';
+            default: return 'Processing';
+        }
+    };
 
     const getProcessedItems = () => {
         let items = activeCategory === 'All' ? [...products] : products.filter(p => p.category === activeCategory);
@@ -80,32 +121,55 @@ const Menu = () => {
     return (
         <div className="min-h-screen bg-nibmGray font-sans overflow-x-hidden pb-24 text-slate-900">
             {userRole !== 'admin' && <CartDrawer />}
+            
             <nav className="bg-white/90 backdrop-blur-xl sticky top-0 z-50 border-b border-gray-100 px-8 py-5">
                 <div className="max-w-7xl mx-auto flex justify-between items-center">
-                    <div className="flex flex-col">
+                    <div className="flex flex-col text-left">
                         <span className="font-black text-nibmBlue tracking-tighter text-2xl uppercase leading-none">Canteen-Zero</span>
                         <span className="text-[9px] font-bold text-nibmRed tracking-[0.3em] uppercase mt-1 ml-0.5">Academic Portal</span>
                     </div>
-                    <div className="flex items-center gap-6">
+                    
+                    <div className="flex items-center gap-4">
                         {userRole === 'admin' && (
-                            <Link to="/admin/dashboard" className="hidden md:block bg-nibmRed text-white text-[10px] font-black px-5 py-2.5 rounded-full hover:bg-red-700 transition-all uppercase tracking-widest shadow-lg shadow-red-200">Admin Portal</Link>
+                            <div className="hidden lg:flex gap-2">
+                                <Link to="/admin/dashboard" className="flex items-center gap-2 bg-slate-800 text-white text-[10px] font-black px-5 py-2.5 rounded-full hover:bg-slate-900 transition-all uppercase tracking-widest shadow-lg">
+                                    <LayoutDashboard size={14} /> Dashboard
+                                </Link>
+                                <Link to="/admin/kitchen" className="flex items-center gap-2 bg-nibmRed text-white text-[10px] font-black px-5 py-2.5 rounded-full hover:bg-red-700 transition-all uppercase tracking-widest shadow-lg shadow-red-200">
+                                    <ChefHat size={14} /> Kitchen
+                                </Link>
+                            </div>
                         )}
+
                         {userRole !== 'admin' && (
                             <button onClick={toggleCart} className="relative group p-2 bg-gray-50 rounded-full transition-all active:scale-90">
-                                <span className="absolute -top-1 -right-1 w-5 h-5 bg-nibmRed text-[10px] text-white font-bold rounded-full flex items-center justify-center border-2 border-white shadow-sm">{cartCount}</span>
+                                <span className="absolute -top-1 -right-1 w-5 h-5 bg-nibmRed text-[10px] text-white font-bold rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                                    {cartCount}
+                                </span>
                                 <span className="text-xl block text-nibmBlue">🛒</span>
                             </button>
                         )}
+
                         <div className="relative" ref={profileRef}>
-                            <div onClick={() => setIsProfileOpen(!isProfileOpen)} className={`h-10 w-10 bg-nibmGold rounded-full border-2 shadow-md flex items-center justify-center text-nibmBlue font-black text-sm cursor-pointer transition-all active:scale-95 ${isProfileOpen ? 'border-nibmBlue' : 'border-white'}`}>{userName.charAt(0).toUpperCase()}</div>
+                            <div 
+                                onClick={() => setIsProfileOpen(!isProfileOpen)}
+                                className={`h-10 w-10 bg-nibmGold rounded-full border-2 shadow-md flex items-center justify-center text-nibmBlue font-black text-sm cursor-pointer transition-all active:scale-95 ${isProfileOpen ? 'border-nibmBlue' : 'border-white'}`}
+                            >
+                                {userName.charAt(0).toUpperCase()}
+                            </div>
+                            
                             {isProfileOpen && (
                                 <div className="absolute right-0 top-14 w-56 bg-white rounded-[1.5rem] shadow-2xl border border-gray-100 p-2 z-[60] animate-in fade-in slide-in-from-top-4 duration-200">
                                     <div className="px-4 py-3 border-b border-gray-50 mb-1">
-                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Profile</p>
-                                        <p className="text-sm font-bold text-nibmBlue truncate">{userName}</p>
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center leading-none mb-1">Authenticated As</p>
+                                        <p className="text-sm font-bold text-nibmBlue truncate text-center">{userName}</p>
                                     </div>
-                                    <Link to="/profile" onClick={() => setIsProfileOpen(false)} className="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl transition-all text-xs font-bold text-slate-600 uppercase tracking-widest"><Settings size={14} className="text-slate-400" /> Settings</Link>
-                                    <button onClick={handleLogout} className="w-full flex items-center gap-3 p-3 hover:bg-red-50 rounded-xl transition-all text-xs font-bold text-nibmRed uppercase tracking-widest"><LogOut size={14}/> Logout</button>
+                                    <Link to="/profile" onClick={() => setIsProfileOpen(false)} className="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl transition-all text-xs font-bold text-slate-600 uppercase tracking-widest">
+                                        <Settings size={14} className="text-slate-400" /> Settings
+                                    </Link>
+                                    <button onClick={handleLogout} className="w-full flex items-center gap-3 p-3 hover:bg-red-50 rounded-xl transition-all text-xs font-bold text-nibmRed uppercase tracking-widest">
+                                        <LogOut size={14}/> Logout
+                                    </button>
                                 </div>
                             )}
                         </div>
@@ -115,26 +179,45 @@ const Menu = () => {
 
             <header className="bg-nibmBlue text-white pt-16 pb-32 px-8 relative">
                 <div className="max-w-7xl mx-auto relative z-10 flex flex-col lg:flex-row justify-between items-center gap-12 animate-slide-in-left">
-                    <div className="w-full lg:w-1/2">
-                        <p className="text-nibmGold font-black tracking-[0.4em] text-[10px] uppercase mb-4 opacity-90 underline underline-offset-8 decoration-nibmRed/50">Official Access</p>
-                        <h1 className="text-6xl font-black tracking-tight mb-4 leading-tight">{userRole === 'admin' ? "System Overview." : `Hello, ${firstName}.`}</h1>
-                        <p className="text-blue-100 text-lg font-medium opacity-70 max-w-xl leading-relaxed italic">"The Place To Be" — Browse the live inventory and secure your meal instantly with our Zero-Queue system.</p>
+                    <div className="w-full lg:w-1/2 text-center lg:text-left">
+                        <p className="text-nibmGold font-black tracking-[0.4em] text-[10px] uppercase mb-4 opacity-90 underline underline-offset-8 decoration-nibmRed/50">Official Academic Access</p>
+                        <h1 className="text-6xl font-black tracking-tight mb-4 leading-tight">
+                            {userRole === 'admin' ? "System Overview." : `Hello, ${firstName}.`}
+                        </h1>
+                        <p className="text-blue-100 text-lg font-medium opacity-70 max-w-xl leading-relaxed italic mx-auto lg:mx-0">
+                            "The Place To Be" — Browse the live inventory and secure your meal instantly with our Zero-Queue system.
+                        </p>
                     </div>
+
                     {activeOrders.length > 0 && showTokenWidget && (
-                        <div className="relative w-full max-w-lg bg-white/10 backdrop-blur-md p-10 rounded-[2.5rem] border border-white/20 flex items-center justify-between shadow-2xl animate-in fade-in zoom-in duration-700 ml-auto group">
-                            <button onClick={() => setShowTokenWidget(false)} className="absolute top-5 right-6 text-white/30 hover:text-white transition-all hover:rotate-90 p-2 z-30"><X size={20} strokeWidth={3} /></button>
-                            <div className="flex flex-col pr-8">
-                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-nibmGold mb-1">{activeOrders.length > 1 ? `Active Tokens (${activeOrders.length})` : 'Active Token Found'}</p>
-                                <h4 className="text-sm font-bold text-white uppercase tracking-tight mb-4 leading-tight">Hand this to <br/> Canteen counter</h4>
+                        <div className={`relative w-full max-w-lg p-10 rounded-[2.5rem] border flex items-center justify-between shadow-2xl transition-all duration-500 ml-auto group ${activeOrders[tokenIndex].status === 'Ready' ? 'bg-green-600 border-green-400' : 'bg-white/10 backdrop-blur-md border-white/20'}`}>
+                            
+                            <button onClick={() => setShowTokenWidget(false)} className="absolute top-5 right-6 text-white/30 hover:text-white transition-all hover:rotate-90 p-2 z-30">
+                                <X size={20} strokeWidth={3} />
+                            </button>
+
+                            <div className="flex flex-col pr-8 text-left">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <BellRing size={14} className={activeOrders[tokenIndex].status === 'Ready' ? 'animate-bounce text-white' : 'text-nibmGold'} />
+                                    <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${activeOrders[tokenIndex].status === 'Ready' ? 'text-white' : 'text-nibmGold'}`}>
+                                        {getStatusLabel(activeOrders[tokenIndex].status)}
+                                    </p>
+                                </div>
+                                <h4 className="text-sm font-bold text-white uppercase tracking-tight mb-4 leading-tight">
+                                    {activeOrders[tokenIndex].status === 'Ready' ? 'Pick up at Counter A' : 'Hand this to counter'}
+                                </h4>
                                 {activeOrders.length > 1 && (
                                     <div className="flex items-center gap-3 text-white/60">
-                                        <button onClick={() => setTokenIndex(prev => (prev - 1 + activeOrders.length) % activeOrders.length)} className="p-1 bg-white/5 rounded-lg hover:text-nibmGold"><ChevronLeft size={16}/></button>
+                                        <button onClick={handlePrevToken} className="hover:text-nibmGold p-1 bg-white/5 rounded-lg transition-colors"><ChevronLeft size={16}/></button>
                                         <span className="text-[9px] font-black tracking-widest">{tokenIndex + 1} / {activeOrders.length}</span>
-                                        <button onClick={() => setTokenIndex(prev => (prev + 1) % activeOrders.length)} className="p-1 bg-white/5 rounded-lg hover:text-nibmGold"><ChevronRight size={16}/></button>
+                                        <button onClick={handleNextToken} className="hover:text-nibmGold p-1 bg-white/5 rounded-lg transition-colors"><ChevronRight size={16}/></button>
                                     </div>
                                 )}
                             </div>
-                            <div className="bg-nibmGold text-nibmBlue text-5xl font-black px-10 py-6 rounded-[2rem] shadow-2xl min-w-[140px] text-center">{activeOrders[tokenIndex].tokenID}</div>
+
+                            <div className={`text-5xl font-black px-10 py-6 rounded-[2rem] shadow-2xl flex-shrink-0 min-w-[140px] text-center relative z-20 ${activeOrders[tokenIndex].status === 'Ready' ? 'bg-white text-green-600 animate-pulse' : 'bg-nibmGold text-nibmBlue'}`}>
+                                {activeOrders[tokenIndex].tokenID}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -150,13 +233,15 @@ const Menu = () => {
                             <ListFilter size={18} />
                         </div>
                         {categories.map(cat => (
-                            <button key={cat} onClick={() => setActiveCategory(cat)} className={`px-8 py-4 rounded-[1.5rem] text-[10px] font-black tracking-[0.2em] uppercase transition-all duration-300 whitespace-nowrap ${activeCategory === cat ? 'bg-nibmBlue text-white shadow-lg translate-y-[-2px]' : 'bg-white/50 text-gray-400 hover:text-nibmBlue'}`}>{cat}</button>
+                            <button key={cat} onClick={() => setActiveCategory(cat)} className={`px-8 py-4 rounded-[1.5rem] text-[10px] font-black tracking-[0.2em] uppercase transition-all duration-300 whitespace-nowrap ${activeCategory === cat ? 'bg-nibmBlue text-white shadow-lg translate-y-[-2px]' : 'bg-white/50 text-gray-400 hover:text-nibmBlue'}`}>
+                                {cat}
+                            </button>
                         ))}
                     </div>
                     <div className="bg-white/80 backdrop-blur-md p-4 rounded-[2.5rem] shadow-premium border border-white/50 flex items-center gap-3 px-6">
                         <ArrowDownUp size={16} className="text-nibmBlue" />
                         <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-transparent text-[10px] font-black text-nibmBlue uppercase tracking-widest outline-none cursor-pointer">
-                            <option value="Default">Sort By</option>
+                            <option value="Default">Sort Selection</option>
                             <option value="Price: Low to High">Price: Low to High</option>
                             <option value="Price: High to Low">Price: High to Low</option>
                             <option value="Fastest Prep">Fastest Prep</option>
@@ -170,9 +255,17 @@ const Menu = () => {
                     <h2 className="text-4xl font-black text-gray-900 tracking-tighter">Academic Selection</h2>
                     <div className="flex-1 h-[2px] bg-gradient-to-r from-gray-200 to-transparent mt-2"></div>
                 </div>
-                {loading ? <div className="flex justify-center py-20 animate-spin w-12 h-12 border-4 border-nibmBlue border-t-transparent rounded-full mx-auto"></div> : (
+
+                {loading ? (
+                    <div className="flex flex-col items-center justify-center py-20">
+                        <div className="w-14 h-14 border-4 border-nibmBlue border-t-nibmGold rounded-full animate-spin mb-4"></div>
+                        <p className="text-gray-400 font-bold text-[10px] tracking-widest uppercase text-center animate-pulse">Syncing Canteen Inventory...</p>
+                    </div>
+                ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-10">
-                        {filteredItems.map((product, index) => <ProductCard key={product._id} product={product} index={index} />)}
+                        {filteredItems.map((product, index) => (
+                            <ProductCard key={product._id} product={product} index={index} />
+                        ))}
                     </div>
                 )}
             </main>

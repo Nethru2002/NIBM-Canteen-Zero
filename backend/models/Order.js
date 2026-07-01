@@ -11,7 +11,11 @@ const orderSchema = new mongoose.Schema({
     totalAmount: { type: Number, required: true },
     status: { type: String, enum: ['Pending', 'Paid', 'Preparing', 'Ready', 'Collected'], default: 'Pending' },
     paymentId: { type: String },
-    tokenID: { type: String },    
+    tokenID: { type: String },
+    paidAt: { type: Date },
+    preparingAt: { type: Date },
+    readyAt: { type: Date },
+    collectedAt: { type: Date }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Order', orderSchema);
