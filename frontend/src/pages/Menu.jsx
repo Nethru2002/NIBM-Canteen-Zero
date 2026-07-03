@@ -4,7 +4,7 @@ import API from '../services/api';
 import ProductCard from '../components/ProductCard';
 import CartDrawer from '../components/CartDrawer';
 import { useCartStore } from '../store/useCartStore';
-import { X, LogOut, Settings, ChevronLeft, ChevronRight, ListFilter, ArrowDownUp, BellRing, ChefHat, LayoutDashboard } from 'lucide-react';
+import { X, LogOut, Settings, ChevronLeft, ChevronRight, ListFilter, ArrowDownUp, BellRing, ChefHat, LayoutDashboard, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { io } from 'socket.io-client';
 
@@ -16,10 +16,13 @@ const Menu = () => {
     const [loading, setLoading] = useState(true);
     const [activeCategory, setActiveCategory] = useState('All');
     const [sortBy, setSortBy] = useState('Default');
+    const [searchQuery, setSearchQuery] = useState('');
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     
     const navigate = useNavigate();
     const profileRef = useRef(null);
+    const alertAudio = useRef(new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'));
+
     const toggleCart = useCartStore((state) => state.toggleCart);
     const cartCount = useCartStore((state) => state.cart.reduce((total, item) => total + item.quantity, 0));
 
@@ -39,63 +42,6 @@ const Menu = () => {
         setTokenIndex((prev) => (prev - 1 + activeOrders.length) % activeOrders.length);
     };
 
-    const fetchActiveOrders = useCallback(async () => {
-        const token = localStorage.getItem('token');
-        if (token) {
-            try {
-                const decoded = JSON.parse(atob(token.split('.')[1]));
-                const res = await API.get(`/api/orders/user/${decoded.id}`);
-                setActiveOrders(res.data);
-            } catch (err) { 
-                console.error("Recovery Error"); 
-            }
-        }
-    }, []);
-
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (profileRef.current && !profileRef.current.contains(event.target)) setIsProfileOpen(false);
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
-
-    useEffect(() => {
-        const socket = io("http://localhost:5000");
-        const token = localStorage.getItem('token');
-        const userId = token ? JSON.parse(atob(token.split('.')[1])).id : null;
-
-        socket.on('orderUpdate', (data) => {
-            if (data.userId === userId) {
-                fetchActiveOrders();
-                if (data.status === 'Ready') {
-                    toast.success("Order Ready for Pickup!", { icon: '🔔', duration: 6000 });
-                    setShowTokenWidget(true);
-                }
-                if (data.status === 'Preparing') {
-                    toast("Chef is preparing your order", { icon: '👨‍🍳' });
-                }
-            }
-        });
-
-        return () => socket.disconnect();
-    }, [fetchActiveOrders]);
-
-    useEffect(() => {
-        const fetchProducts = async () => {
-            try {
-                const res = await API.get('/api/products');
-                setProducts(res.data);
-            } catch (err) { 
-                console.error("Sync Error"); 
-            } finally { 
-                setLoading(false); 
-            }
-        };
-        fetchProducts();
-        fetchActiveOrders();
-    }, [fetchActiveOrders]);
-
     const getStatusLabel = (status) => {
         switch (status) {
             case 'Paid': return 'Awaiting Cook';
@@ -105,11 +51,87 @@ const Menu = () => {
         }
     };
 
+    const fetchProducts = useCallback(async () => {
+        try {
+            const res = await API.get('/api/products');
+            setProducts(res.data);
+        } catch (err) {
+            console.error("Sync Error");
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    const fetchActiveOrders = useCallback(async () => {
+        const token = localStorage.getItem('token');
+        if (token) {
+            try {
+                const decoded = JSON.parse(atob(token.split('.')[1]));
+                const res = await API.get(`/api/orders/user/${decoded.id}`);
+                setActiveOrders(res.data);
+                if (res.data.length === 0) setShowTokenWidget(false);
+            } catch (err) {
+                console.error("Recovery Error");
+            }
+        }
+    }, []);
+
+    useEffect(() => {
+        const socket = io(process.env.REACT_APP_API_URL);
+        const token = localStorage.getItem('token');
+        const userId = token ? JSON.parse(atob(token.split('.')[1])).id : null;
+
+        socket.on('inventoryUpdate', () => {
+            fetchProducts();
+            toast("Menu updated by staff", { icon: '🔄' });
+        });
+
+        socket.on('orderUpdate', (data) => {
+            if (data.userId === userId) {
+                fetchActiveOrders();
+                if (data.status === 'Ready') {
+                    alertAudio.current.play().catch(e => console.log("Audio muted"));
+                    toast.success(`Token #${data.tokenID} is Ready!`, { 
+                        icon: '🔔', 
+                        duration: 8000,
+                        style: { background: '#22c55e', color: '#fff' }
+                    });
+                    setShowTokenWidget(true);
+                }
+                if (data.status === 'Preparing') {
+                    toast("Chef is preparing your meal", { icon: '👨‍🍳' });
+                }
+                if (data.status === 'Collected') {
+                    toast.success("Enjoy your meal!", { icon: '🍽️' });
+                    setShowTokenWidget(false);
+                }
+            }
+        });
+
+        return () => socket.disconnect();
+    }, [fetchProducts, fetchActiveOrders]);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (profileRef.current && !profileRef.current.contains(event.target)) setIsProfileOpen(false);
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        fetchProducts();
+        fetchActiveOrders();
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [fetchProducts, fetchActiveOrders]);
+
     const getProcessedItems = () => {
-        let items = activeCategory === 'All' ? [...products] : products.filter(p => p.category === activeCategory);
+        let items = products.filter(p => {
+            const matchesCategory = activeCategory === 'All' || p.category === activeCategory;
+            const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
+            return matchesCategory && matchesSearch;
+        });
+
         if (sortBy === 'Price: Low to High') items.sort((a, b) => a.price - b.price);
         if (sortBy === 'Price: High to Low') items.sort((a, b) => b.price - a.price);
         if (sortBy === 'Fastest Prep') items.sort((a, b) => a.prepTime - b.prepTime);
+        
         return items;
     };
 
@@ -120,7 +142,7 @@ const Menu = () => {
 
     return (
         <div className="min-h-screen bg-nibmGray font-sans overflow-x-hidden pb-24 text-slate-900">
-            {userRole !== 'admin' && <CartDrawer />}
+            <CartDrawer />
             
             <nav className="bg-white/90 backdrop-blur-xl sticky top-0 z-50 border-b border-gray-100 px-8 py-5">
                 <div className="max-w-7xl mx-auto flex justify-between items-center">
@@ -142,11 +164,11 @@ const Menu = () => {
                         )}
 
                         {userRole !== 'admin' && (
-                            <button onClick={toggleCart} className="relative group p-2 bg-gray-50 rounded-full transition-all active:scale-90">
+                            <button onClick={toggleCart} className="relative group p-2 bg-gray-50 rounded-full transition-all active:scale-90 text-nibmBlue">
                                 <span className="absolute -top-1 -right-1 w-5 h-5 bg-nibmRed text-[10px] text-white font-bold rounded-full flex items-center justify-center border-2 border-white shadow-sm">
                                     {cartCount}
                                 </span>
-                                <span className="text-xl block text-nibmBlue">🛒</span>
+                                <span className="text-xl block">🛒</span>
                             </button>
                         )}
 
@@ -164,10 +186,13 @@ const Menu = () => {
                                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center leading-none mb-1">Authenticated As</p>
                                         <p className="text-sm font-bold text-nibmBlue truncate text-center">{userName}</p>
                                     </div>
-                                    <Link to="/profile" onClick={() => setIsProfileOpen(false)} className="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl transition-all text-xs font-bold text-slate-600 uppercase tracking-widest">
+                                    <Link to="/profile" onClick={() => setIsProfileOpen(false)} className="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl transition-all text-xs font-bold text-slate-600 uppercase tracking-widest text-left w-full">
                                         <Settings size={14} className="text-slate-400" /> Settings
                                     </Link>
-                                    <button onClick={handleLogout} className="w-full flex items-center gap-3 p-3 hover:bg-red-50 rounded-xl transition-all text-xs font-bold text-nibmRed uppercase tracking-widest">
+                                    <button 
+                                        onClick={handleLogout}
+                                        className="w-full flex items-center gap-3 p-3 hover:bg-red-50 rounded-xl transition-all text-xs font-bold text-nibmRed uppercase tracking-widest text-left"
+                                    >
                                         <LogOut size={14}/> Logout
                                     </button>
                                 </div>
@@ -185,12 +210,12 @@ const Menu = () => {
                             {userRole === 'admin' ? "System Overview." : `Hello, ${firstName}.`}
                         </h1>
                         <p className="text-blue-100 text-lg font-medium opacity-70 max-w-xl leading-relaxed italic mx-auto lg:mx-0">
-                            "The Place To Be" — Browse the live inventory and secure your meal instantly with our Zero-Queue system.
+                            Secure your meal instantly with our Zero-Queue digital ordering system.
                         </p>
                     </div>
 
                     {activeOrders.length > 0 && showTokenWidget && (
-                        <div className={`relative w-full max-w-lg p-10 rounded-[2.5rem] border flex items-center justify-between shadow-2xl transition-all duration-500 ml-auto group ${activeOrders[tokenIndex].status === 'Ready' ? 'bg-green-600 border-green-400' : 'bg-white/10 backdrop-blur-md border-white/20'}`}>
+                        <div className={`relative w-full max-w-lg p-10 rounded-[2.5rem] border flex items-center justify-between shadow-2xl transition-all duration-500 ml-auto group ${activeOrders[tokenIndex].status === 'Ready' ? 'bg-green-600 border-green-400 scale-105' : 'bg-white/10 backdrop-blur-md border-white/20'}`}>
                             
                             <button onClick={() => setShowTokenWidget(false)} className="absolute top-5 right-6 text-white/30 hover:text-white transition-all hover:rotate-90 p-2 z-30">
                                 <X size={20} strokeWidth={3} />
@@ -203,7 +228,7 @@ const Menu = () => {
                                         {getStatusLabel(activeOrders[tokenIndex].status)}
                                     </p>
                                 </div>
-                                <h4 className="text-sm font-bold text-white uppercase tracking-tight mb-4 leading-tight">
+                                <h4 className="text-sm font-bold text-white uppercase tracking-tight mb-4 leading-tight text-left">
                                     {activeOrders[tokenIndex].status === 'Ready' ? 'Pick up at Counter A' : 'Hand this to counter'}
                                 </h4>
                                 {activeOrders.length > 1 && (
@@ -222,7 +247,7 @@ const Menu = () => {
                     )}
                 </div>
                 <div className="absolute top-0 right-0 w-1/3 h-full opacity-5 pointer-events-none overflow-hidden">
-                   <svg viewBox="0 0 100 100" className="w-full h-full scale-150 fill-white"><circle cx="50" cy="50" r="50"/></svg>
+                    <svg viewBox="0 0 100 100" className="w-full h-full scale-150 fill-white"><circle cx="50" cy="50" r="50"/></svg>
                 </div>
             </header>
 
@@ -238,6 +263,18 @@ const Menu = () => {
                             </button>
                         ))}
                     </div>
+                    
+                    <div className="flex-[0.6] flex items-center gap-3 bg-white border border-gray-100 p-4 rounded-[2.5rem] shadow-premium px-6 group transition-all focus-within:ring-2 focus-within:ring-nibmBlue/10">
+                        <Search size={18} className="text-gray-300 group-focus-within:text-nibmBlue transition-colors" />
+                        <input 
+                            type="text" 
+                            placeholder="Find your favorite meal..." 
+                            className="bg-transparent text-[11px] font-bold text-slate-600 w-full outline-none placeholder:text-gray-300 tracking-wider"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                    </div>
+
                     <div className="bg-white/80 backdrop-blur-md p-4 rounded-[2.5rem] shadow-premium border border-white/50 flex items-center gap-3 px-6">
                         <ArrowDownUp size={16} className="text-nibmBlue" />
                         <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-transparent text-[10px] font-black text-nibmBlue uppercase tracking-widest outline-none cursor-pointer">
@@ -252,7 +289,7 @@ const Menu = () => {
 
             <main className="max-w-7xl mx-auto p-8 mt-12">
                 <div className="flex items-center gap-6 mb-12">
-                    <h2 className="text-4xl font-black text-gray-900 tracking-tighter">Academic Selection</h2>
+                    <h2 className="text-4xl font-black text-gray-900 tracking-tighter uppercase leading-none">Academic Selection</h2>
                     <div className="flex-1 h-[2px] bg-gradient-to-r from-gray-200 to-transparent mt-2"></div>
                 </div>
 
@@ -261,11 +298,16 @@ const Menu = () => {
                         <div className="w-14 h-14 border-4 border-nibmBlue border-t-nibmGold rounded-full animate-spin mb-4"></div>
                         <p className="text-gray-400 font-bold text-[10px] tracking-widest uppercase text-center animate-pulse">Syncing Canteen Inventory...</p>
                     </div>
-                ) : (
+                ) : filteredItems.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-10">
                         {filteredItems.map((product, index) => (
                             <ProductCard key={product._id} product={product} index={index} />
                         ))}
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center justify-center py-32 opacity-20">
+                        <Search size={80} strokeWidth={1} />
+                        <p className="font-black uppercase tracking-[0.4em] text-xs mt-6 text-center">No matches found for "{searchQuery}"</p>
                     </div>
                 )}
             </main>

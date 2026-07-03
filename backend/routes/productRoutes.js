@@ -23,7 +23,11 @@ const storage = new CloudinaryStorage({
 
 const upload = multer({ storage: storage });
 
-// GET: Student View
+const emitUpdate = (req) => {
+    const io = req.app.get('socketio');
+    io.emit('inventoryUpdate');
+};
+
 router.get('/', async (req, res, next) => {
     try {
         const products = await Product.find({ isAvailable: true }).sort({ category: 1 });
@@ -33,7 +37,6 @@ router.get('/', async (req, res, next) => {
     }
 });
 
-// GET: Admin View
 router.get('/admin-list', async (req, res, next) => {
     try {
         const products = await Product.find().sort({ createdAt: -1 });
@@ -43,72 +46,56 @@ router.get('/admin-list', async (req, res, next) => {
     }
 });
 
-// POST: Add New Product
 router.post('/', upload.single('image'), validateProduct, async (req, res, next) => {
     try {
         if (!req.file) {
-            const error = new Error("Image upload is mandatory for new items");
+            const error = new Error("Image upload mandatory");
             error.statusCode = 400;
             throw error;
         }
-
         const data = JSON.parse(req.body.data);
-        const newProduct = new Product({
-            ...data,
-            image: req.file.path
-        });
-
+        const newProduct = new Product({ ...data, image: req.file.path });
         await newProduct.save();
+        emitUpdate(req);
         res.status(201).json(newProduct);
     } catch (err) {
         next(err);
     }
 });
 
-// PUT: Update Existing Product
 router.put('/:id', upload.single('image'), async (req, res, next) => {
     try {
         const data = JSON.parse(req.body.data);
         const updatePayload = { ...data };
-
-        if (req.file) {
-            updatePayload.image = req.file.path;
-        }
-
-        const updatedProduct = await Product.findByIdAndUpdate(
-            req.params.id, 
-            updatePayload, 
-            { new: true }
-        );
-
+        if (req.file) updatePayload.image = req.file.path;
+        const updatedProduct = await Product.findByIdAndUpdate(req.params.id, updatePayload, { new: true });
         if (!updatedProduct) {
-            const error = new Error("Target product not found");
+            const error = new Error("Product not found");
             error.statusCode = 404;
             throw error;
         }
-
+        emitUpdate(req);
         res.status(200).json(updatedProduct);
     } catch (err) {
         next(err);
     }
 });
 
-// DELETE: Remove Product
 router.delete('/:id', async (req, res, next) => {
     try {
         const deletedProduct = await Product.findByIdAndDelete(req.params.id);
         if (!deletedProduct) {
-            const error = new Error("Item already removed or does not exist");
+            const error = new Error("Item not found");
             error.statusCode = 404;
             throw error;
         }
-        res.status(200).json({ message: "Item deleted successfully" });
+        emitUpdate(req);
+        res.status(200).json({ message: "Deleted" });
     } catch (err) {
         next(err);
     }
 });
 
-// PATCH: Toggle Availability
 router.patch('/:id/toggle', async (req, res, next) => {
     try {
         const product = await Product.findById(req.params.id);
@@ -117,30 +104,30 @@ router.patch('/:id/toggle', async (req, res, next) => {
             error.statusCode = 404;
             throw error;
         }
-
         product.isAvailable = !product.isAvailable;
         await product.save();
+        emitUpdate(req);
         res.status(200).json(product);
     } catch (err) {
         next(err);
     }
 });
 
-// POST: Daily Basis Reset logic
 router.post('/daily-reset', async (req, res, next) => {
     try {
         await Product.updateMany({}, { isAvailable: true });
-        res.status(200).json({ message: "All items restored to available status" });
+        emitUpdate(req);
+        res.status(200).json({ message: "Reset complete" });
     } catch (err) {
         next(err);
     }
 });
 
-// POST: System Seeding
 router.post('/seed', async (req, res, next) => {
     try {
         await Product.deleteMany({});
         const products = await Product.insertMany(req.body);
+        emitUpdate(req);
         res.status(201).json(products);
     } catch (err) {
         next(err);

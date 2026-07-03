@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, ShoppingBasket, Plus, Minus, Trash2, ArrowRight } from 'lucide-react';
 import { useCartStore } from '../store/useCartStore';
+import toast from 'react-hot-toast';
 
 const CartDrawer = () => {
     const navigate = useNavigate();
@@ -11,12 +12,19 @@ const CartDrawer = () => {
         return cart.reduce((total, item) => total + item.price * item.quantity, 0);
     };
 
-    if (!isCartOpen) return null;
+    const handleRemove = (id, name) => {
+        removeFromCart(id);
+        toast.error(`${name} removed from basket`, {
+            style: { borderRadius: '15px', background: '#334155', color: '#fff', fontSize: '12px' }
+        });
+    };
 
     const handleCheckout = () => {
         toggleCart();
         navigate('/checkout');
     };
+
+    if (!isCartOpen) return null;
 
     return (
         <div className="fixed inset-0 z-[100] flex justify-end">
@@ -42,22 +50,35 @@ const CartDrawer = () => {
                         </div>
                     ) : (
                         cart.map((item) => (
-                            <div key={item._id} className="flex gap-4 group bg-gray-50/50 p-3 rounded-[1.5rem] border border-gray-100">
+                            <div key={item._id} className="flex gap-4 group bg-gray-50/50 p-3 rounded-[1.5rem] border border-gray-100 animate-in fade-in duration-300">
                                 <img src={item.image} alt="" className="w-20 h-20 rounded-2xl object-cover shadow-sm" />
                                 <div className="flex-1 flex flex-col justify-between py-0.5">
                                     <div>
                                         <h3 className="font-bold text-gray-800 text-sm leading-tight">{item.name}</h3>
-                                        <p className="text-nibmBlue font-black text-sm mt-1 italic">Rs. {item.price}</p>
+                                        <p className="text-nibmBlue font-black text-sm mt-1 italic leading-none font-mono">Rs. {item.price}</p>
                                     </div>
                                     
                                     <div className="flex items-center justify-between mt-2">
-                                        <div className="flex items-center gap-3 bg-white border border-gray-200 px-3 py-1.5 rounded-xl">
-                                            <button onClick={() => updateQuantity(item._id, -1)} className="text-gray-400 hover:text-nibmRed transition-colors"><Minus size={14}/></button>
+                                        <div className="flex items-center gap-3 bg-white border border-gray-200 px-3 py-1.5 rounded-xl shadow-sm">
+                                            <button 
+                                                onClick={() => updateQuantity(item._id, -1)} 
+                                                className="text-gray-400 hover:text-nibmRed transition-all active:scale-150"
+                                            >
+                                                <Minus size={14}/>
+                                            </button>
                                             <span className="font-black text-xs w-4 text-center text-nibmBlue">{item.quantity}</span>
-                                            <button onClick={() => updateQuantity(item._id, 1)} className="text-gray-400 hover:text-nibmBlue transition-colors"><Plus size={14}/></button>
+                                            <button 
+                                                onClick={() => updateQuantity(item._id, 1)} 
+                                                className="text-gray-400 hover:text-nibmBlue transition-all active:scale-150"
+                                            >
+                                                <Plus size={14}/>
+                                            </button>
                                         </div>
-                                        <button onClick={() => removeFromCart(item._id)} className="p-2 text-gray-300 hover:text-nibmRed transition-colors">
-                                            <Trash2 size={16} />
+                                        <button 
+                                            onClick={() => handleRemove(item._id, item.name)} 
+                                            className="p-2 text-gray-300 hover:text-nibmRed transition-all hover:bg-red-50 rounded-lg active:scale-90"
+                                        >
+                                            <Trash2 size={18} />
                                         </button>
                                     </div>
                                 </div>
@@ -71,7 +92,7 @@ const CartDrawer = () => {
                         <div className="flex justify-between items-end">
                             <div className="flex flex-col">
                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Payable Amount</span>
-                                <span className="text-3xl font-black text-nibmBlue italic leading-none mt-1">Rs. {getCartTotal()}</span>
+                                <span className="text-3xl font-black text-nibmBlue italic leading-none mt-1 font-mono tracking-tighter">Rs. {getCartTotal()}</span>
                             </div>
                             <div className="text-[10px] font-bold text-nibmRed uppercase tracking-widest bg-red-50 px-3 py-1 rounded-lg">LANKAQR READY</div>
                         </div>

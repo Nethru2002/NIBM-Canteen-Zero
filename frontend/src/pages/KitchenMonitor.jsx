@@ -23,12 +23,16 @@ const KitchenMonitor = () => {
     }, []);
 
     useEffect(() => {
-        const socket = io("http://localhost:5000");
+        const socket = io(process.env.REACT_APP_API_URL || "http://localhost:5000");
         
-        socket.on('newOrder', (newOrder) => {
+        socket.on('newOrderAlert', (newOrder) => {
             setOrders(prev => [...prev, newOrder]);
-            audioRef.current.play().catch(e => console.log("Audio play blocked by browser"));
-            toast("New Order Incoming!", { icon: '🔔', position: 'top-right' });
+            audioRef.current.play().catch(e => console.log("Audio play blocked"));
+            toast.success(`Incoming: Token #${newOrder.tokenID}`, { 
+                icon: '🔔', 
+                position: 'top-right',
+                style: { background: '#ffc600', color: '#0b3d91', fontWeight: 'bold' }
+            });
         });
 
         fetchOrders();
@@ -62,16 +66,16 @@ const KitchenMonitor = () => {
     return (
         <div className="min-h-screen bg-slate-950 text-white font-sans p-8 overflow-x-hidden">
             <header className="max-w-7xl mx-auto flex justify-between items-center mb-12 border-b border-white/5 pb-10">
-                <div className="flex items-center gap-8">
+                <div className="flex items-center gap-8 animate-in fade-in slide-in-from-left duration-500">
                     <button onClick={() => navigate('/admin/dashboard')} className="p-4 bg-white/5 rounded-[1.5rem] border border-white/5 hover:bg-white/10 transition-all text-gray-500 hover:text-white shadow-xl">
                         <ArrowLeft size={24} />
                     </button>
-                    <div>
+                    <div className="text-left">
                         <div className="flex items-center gap-4">
                             <div className="p-3 bg-nibmGold/10 rounded-2xl">
                                 <ChefHat className="text-nibmGold" size={32} />
                             </div>
-                            <h1 className="text-5xl font-black tracking-tighter uppercase leading-none text-white">Kitchen Monitor</h1>
+                            <h1 className="text-5xl font-black tracking-tighter uppercase leading-none">Kitchen Monitor</h1>
                         </div>
                         <div className="flex items-center gap-3 mt-4">
                             <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] px-4 py-1 border border-white/5 rounded-full">Production Queue</span>
@@ -82,10 +86,13 @@ const KitchenMonitor = () => {
                         </div>
                     </div>
                 </div>
-                <div className="flex items-center gap-6">
+                <div className="flex items-center gap-6 animate-in fade-in slide-in-from-right duration-500">
                     <div className="text-right hidden md:block leading-none">
                         <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Live Feed Status</p>
-                        <p className="text-sm font-black text-green-500 uppercase tracking-tighter">System Synchronized</p>
+                        <div className="flex items-center gap-2 justify-end">
+                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]"></div>
+                            <p className="text-sm font-black text-green-500 uppercase tracking-tighter">System Synchronized</p>
+                        </div>
                     </div>
                     <button onClick={fetchOrders} className="p-5 bg-white/5 rounded-[2rem] border border-white/5 hover:bg-white/10 hover:rotate-180 transition-all duration-1000 shadow-2xl group">
                         <RotateCcw size={20} className="text-nibmGold group-hover:scale-110" />
@@ -101,7 +108,7 @@ const KitchenMonitor = () => {
             ) : (
                 <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-10">
                     {orders.map((order) => (
-                        <div key={order._id} className="bg-white/[0.03] border border-white/5 rounded-[3.5rem] p-10 flex flex-col h-full hover:bg-white/[0.05] hover:border-white/10 transition-all relative overflow-hidden group shadow-2xl backdrop-blur-3xl animate-in zoom-in duration-500">
+                        <div key={order._id} className="bg-white/[0.03] border border-white/5 rounded-[3.5rem] p-10 flex flex-col h-full hover:bg-white/[0.05] hover:border-white/10 transition-all relative overflow-hidden group shadow-2xl backdrop-blur-3xl animate-in zoom-in duration-500 text-left">
                             
                             <div className="flex justify-between items-start mb-10">
                                 <div className="space-y-4">
@@ -137,7 +144,7 @@ const KitchenMonitor = () => {
                                         onClick={() => updateStatus(order._id, 'Preparing')}
                                         className="w-full bg-blue-600 text-white font-black py-6 rounded-[2rem] hover:bg-blue-500 transition-all flex items-center justify-center gap-4 uppercase text-sm tracking-[0.2em] shadow-xl shadow-blue-900/40 active:scale-95 group"
                                     >
-                                        <Flame size={20} className="group-hover:animate-bounce" /> Start Preparing
+                                        <Flame size={20} className="group-hover:animate-bounce" /> Start Cooking
                                     </button>
                                 )}
                                 {order.status === 'Preparing' && (

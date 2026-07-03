@@ -7,12 +7,15 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import API from '../services/api';
+import { io } from 'socket.io-client';
 
 const AdminDashboard = () => {
     const [inventory, setInventory] = useState([]);
     const [pendingOrders, setPendingOrders] = useState([]);
     const [searchTerm, setSearchBar] = useState('');
     const fileInputRef = useRef(null);
+    const alertAudio = useRef(new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'));
+    
     const [isEditing, setIsEditing] = useState(false);
     const [editId, setEditId] = useState(null);
     const [formData, setFormData] = useState({ 
@@ -45,7 +48,7 @@ const AdminDashboard = () => {
             const res = await API.get('/api/products/admin-list');
             setInventory(res.data);
         } catch (err) { 
-            toast.error("Database out of sync"); 
+            toast.error("Database sync failed"); 
         }
     }, []);
 
@@ -54,24 +57,36 @@ const AdminDashboard = () => {
             const res = await API.get('/api/orders/admin/active');
             setPendingOrders(res.data);
         } catch (err) {
-            console.error("Order stream failed");
+            console.error("Order sync error");
         }
     }, []);
 
-    useEffect(() => { 
+    useEffect(() => {
+        const socket = io(process.env.REACT_APP_API_URL || "http://localhost:5000");
+        
+        socket.on('newOrderAlert', (data) => {
+            alertAudio.current.play().catch(e => console.log("Audio muted"));
+            fetchOrders();
+            toast.success(`NEW ORDER: Token #${data.tokenID}`, {
+                duration: 6000,
+                position: 'top-right',
+                style: { background: '#d71920', color: '#fff', fontWeight: '900' },
+                icon: '🛒'
+            });
+        });
+
         fetchInventory(); 
         fetchOrders();
-        const interval = setInterval(fetchOrders, 10000);
-        return () => clearInterval(interval);
+        return () => socket.disconnect();
     }, [fetchInventory, fetchOrders]);
 
     const handleCollect = async (id) => {
         try {
             await API.patch(`/api/orders/${id}/collect`);
-            toast.success("Pickup verified");
+            toast.success("Order Handed Over");
             fetchOrders();
         } catch (err) {
-            toast.error("Update failed");
+            toast.error("Handover update failed");
         }
     };
 
@@ -84,7 +99,6 @@ const AdminDashboard = () => {
         });
         setPreviewUrl(item.image);
         setImageFile(null);
-        toast(`Modifying ${item.name}`, { icon: '⚙️' });
     };
 
     const cancelEdit = () => {
@@ -96,13 +110,12 @@ const AdminDashboard = () => {
     };
 
     const handleDelete = async (id, name) => {
-        if (window.confirm(`Permanently remove ${name} from catalog?`)) {
+        if (window.confirm(`Delete ${name}?`)) {
             try {
                 await API.delete(`/api/products/${id}`);
                 fetchInventory();
-                toast.success("Inventory Updated");
-                if (editId === id) cancelEdit();
-            } catch (err) { toast.error("Process failed"); }
+                toast.success("Item Deleted");
+            } catch (err) { toast.error("Fail"); }
         }
     };
 
@@ -110,21 +123,21 @@ const AdminDashboard = () => {
         try {
             await API.patch(`/api/products/${id}/toggle`);
             fetchInventory();
-            toast.success("Availability switched");
+            toast.success("Availability updated");
         } catch (err) { toast.error("Toggle error"); }
     };
 
     const handleGlobalReset = async () => {
-        if(window.confirm("Restore all items to Available for today?")) {
+        if(window.confirm("Initialize new day?")) {
             await API.post('/api/products/daily-reset');
             fetchInventory();
-            toast.success("New Session Initialized");
+            toast.success("Inventory Restored");
         }
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!imageFile && !isEditing) return toast.error("Product visual required");
+        if (!imageFile && !isEditing) return toast.error("Media required");
         setLoading(true);
         const data = new FormData();
         if (imageFile) data.append('image', imageFile);
@@ -134,8 +147,8 @@ const AdminDashboard = () => {
             else await API.post('/api/products', data);
             fetchInventory();
             cancelEdit();
-            toast.success("Catalog Synchronized");
-        } catch (err) { toast.error("Database Error"); }
+            toast.success("Database Synchronized");
+        } catch (err) { toast.error("Server Error"); }
         finally { setLoading(false); }
     };
 
@@ -143,7 +156,7 @@ const AdminDashboard = () => {
         <div className="h-screen w-full bg-[#f1f5f9] flex flex-col md:flex-row font-sans text-slate-900 overflow-hidden">
             <div className="w-full md:w-[60%] flex flex-col bg-[#f8fafc]">
                 <div className="bg-nibmBlue p-8 text-white flex justify-between items-center shadow-lg z-10">
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-4 text-left">
                         <Link to="/menu" className="p-2 hover:bg-white/10 rounded-full transition-all">
                             <ArrowLeft size={20} />
                         </Link>
@@ -172,17 +185,17 @@ const AdminDashboard = () => {
                         <CalendarDays size={16} />
                         <span className="text-[10px] font-black uppercase tracking-widest leading-none">Session: {new Date().toLocaleDateString('en-GB')}</span>
                     </div>
-                    <button onClick={handleGlobalReset} className="flex items-center gap-2 bg-slate-100 text-nibmBlue px-4 py-2 rounded-xl hover:bg-nibmGold transition-all font-black text-[9px] uppercase tracking-widest border border-slate-200 shadow-sm"><RotateCcw size={12} /> Global Inventory Reset</button>
+                    <button onClick={handleGlobalReset} className="flex items-center gap-2 bg-slate-100 text-nibmBlue px-4 py-2 rounded-xl hover:bg-nibmGold transition-all font-black text-[9px] uppercase tracking-widest border border-slate-200 shadow-sm"><RotateCcw size={12} /> Global Reset</button>
                 </div>
 
                 <div className="p-8 overflow-y-auto no-scrollbar flex-1 space-y-8 pb-32">
                     <div>
-                        <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center justify-between mb-6 px-1">
                             <h2 className="text-sm font-black text-nibmBlue uppercase tracking-widest flex items-center gap-2"><ShoppingBag size={16}/> Pending Pickups</h2>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {pendingOrders.map(order => (
-                                <div key={order._id} className="bg-nibmGold p-5 rounded-[2.5rem] flex justify-between items-center shadow-lg shadow-yellow-100 border border-white/50 animate-in fade-in zoom-in duration-300">
+                                <div key={order._id} className="bg-nibmGold p-5 rounded-[2rem] flex justify-between items-center shadow-lg shadow-yellow-100 border border-white/50 animate-in fade-in zoom-in duration-300">
                                     <div className="flex items-center gap-4">
                                         <span className="text-4xl font-black text-nibmBlue leading-none">{order.tokenID}</span>
                                         <div className="flex flex-col">
@@ -193,18 +206,18 @@ const AdminDashboard = () => {
                                     <button onClick={() => handleCollect(order._id)} className="bg-nibmBlue text-white p-3 rounded-2xl hover:bg-slate-900 transition-all shadow-lg"><CheckCircle2 size={20}/></button>
                                 </div>
                             ))}
-                            {pendingOrders.length === 0 && <p className="col-span-full text-center py-10 text-[10px] font-black text-gray-300 uppercase tracking-[0.4em]">No orders in queue</p>}
+                            {pendingOrders.length === 0 && <p className="col-span-full text-center py-10 text-[10px] font-black text-gray-300 uppercase tracking-[0.4em]">Queue Clear</p>}
                         </div>
                     </div>
 
                     <div>
-                        <h2 className="text-sm font-black text-nibmBlue uppercase tracking-widest mb-6">Master Inventory</h2>
+                        <h2 className="text-sm font-black text-nibmBlue uppercase tracking-widest mb-6 px-1">Master Inventory</h2>
                         <div className="space-y-4">
                             {inventory.filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase())).map(item => (
                                 <div key={item._id} className={`flex items-center justify-between p-5 rounded-[2rem] border transition-all ${item.isAvailable ? 'bg-white border-gray-100 shadow-sm' : 'bg-gray-100 border-dashed border-gray-300 opacity-60'}`}>
                                     <div className="flex items-center gap-5">
                                         <img src={item.image} className="w-14 h-14 rounded-2xl object-cover shadow-inner bg-gray-50 border border-gray-100" alt="" />
-                                        <div>
+                                        <div className="text-left">
                                             <h3 className="font-bold text-gray-800 text-sm">{item.name}</h3>
                                             <div className="flex gap-2 mt-1">
                                                 <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded-md">{item.category}</span>
@@ -230,16 +243,16 @@ const AdminDashboard = () => {
                     <div className={`w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center shadow-lg transition-all ${isEditing ? 'bg-nibmGold text-nibmBlue scale-110' : 'bg-slate-100 text-slate-300'}`}>
                         <PackagePlus size={24} />
                     </div>
-                    <h2 className="text-xl font-black text-nibmBlue tracking-widest uppercase leading-none">{isEditing ? 'Update Selection' : 'Catalog Entry'}</h2>
+                    <h2 className="text-xl font-black text-nibmBlue tracking-widest uppercase leading-none">{isEditing ? 'Update Entry' : 'Catalog Entry'}</h2>
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-10 space-y-6 overflow-hidden flex-1">
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Product Name</label>
+                        <div className="space-y-1.5 text-left">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Name</label>
                             <input type="text" name="name" required className="w-full bg-gray-50 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-nibmBlue text-sm font-medium" value={formData.name} onChange={handleChange} />
                         </div>
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 text-left">
                             <label className="flex items-center gap-1.5 text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1"><Utensils size={12} className="text-nibmBlue"/> Category</label>
                             <select name="category" className="w-full bg-gray-50 p-4 rounded-2xl outline-none font-bold text-nibmBlue text-sm appearance-none" value={formData.category} onChange={handleChange}>
                                 <option value="Snacks">Snacks</option>
@@ -250,17 +263,17 @@ const AdminDashboard = () => {
                         </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Marketing Description</label>
+                    <div className="space-y-1.5 text-left">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Description</label>
                         <textarea name="description" rows="2" required className="w-full bg-gray-50 p-4 rounded-2xl outline-none text-sm resize-none font-medium text-gray-600" value={formData.description} onChange={handleChange} />
                     </div>
 
                     <div className="grid grid-cols-3 gap-4">
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 text-left">
                             <label className="flex items-center gap-1.5 text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1"><BadgeDollarSign size={12} className="text-nibmBlue"/> Price</label>
                             <input type="number" name="price" className="w-full bg-gray-50 p-4 rounded-2xl text-center font-black text-nibmBlue" value={formData.price} onChange={handleChange} />
                         </div>
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 text-left">
                             <label className="flex items-center gap-1.5 text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1"><Clock size={12} className="text-nibmBlue"/> Prep</label>
                             <input type="number" name="prepTime" className="w-full bg-gray-50 p-4 rounded-2xl text-center font-black text-nibmBlue" value={formData.prepTime} onChange={handleChange} />
                         </div>
@@ -273,10 +286,10 @@ const AdminDashboard = () => {
                     </div>
 
                     <div className="flex gap-4">
-                        <div className="flex-1 space-y-1.5">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Media Asset</label>
+                        <div className="flex-1 space-y-1.5 text-left">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Media</label>
                             <button type="button" onClick={() => fileInputRef.current.click()} className={`w-full border-2 border-dashed p-4 rounded-2xl font-bold text-[10px] tracking-widest uppercase flex items-center justify-center gap-2 transition-all ${imageFile ? 'bg-blue-600 border-blue-600 text-white shadow-lg' : 'bg-blue-50 border-blue-100 text-blue-600'}`}>
-                                <Upload size={14} /> {imageFile ? 'Source Attached' : isEditing ? 'Change Visual' : 'Upload Image'}
+                                <Upload size={14} /> {imageFile ? 'Attached' : isEditing ? 'Update' : 'Upload'}
                             </button>
                             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
                         </div>
@@ -289,14 +302,14 @@ const AdminDashboard = () => {
                     </div>
 
                     <button type="submit" disabled={loading} className={`w-full text-white font-black py-5 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3 uppercase tracking-widest ${isEditing ? 'bg-nibmGold hover:bg-yellow-500 shadow-yellow-100' : 'bg-nibmRed hover:bg-red-700 shadow-red-100'}`}>
-                        {loading ? <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span> : <><ClipboardCheck size={20} /> {isEditing ? 'Commit Changes' : 'Post to Catalog'}</>}
+                        {loading ? <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span> : <><ClipboardCheck size={20} /> {isEditing ? 'Save Changes' : 'Commit Entry'}</>}
                     </button>
 
                     {previewUrl && (
                         <div className="mt-4 p-4 bg-slate-50 rounded-[2rem] border border-gray-100 flex flex-col items-center shadow-inner">
-                            <div className="flex items-center gap-2 text-gray-400 mb-3 leading-none">
+                            <div className="flex items-center gap-2 text-gray-300 mb-3 leading-none">
                                 <Eye size={14} />
-                                <span className="text-[9px] font-black uppercase tracking-widest leading-none">Visual Integrity Check</span>
+                                <span className="text-[9px] font-black uppercase tracking-widest leading-none">Visual Check</span>
                             </div>
                             <img src={previewUrl} className="w-full h-32 object-cover rounded-2xl shadow-md border-2 border-white" alt="" />
                         </div>

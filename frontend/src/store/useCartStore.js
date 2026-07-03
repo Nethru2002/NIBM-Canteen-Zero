@@ -31,12 +31,23 @@ export const useCartStore = create(
             updateQuantity: (productId, amount) => {
                 set({
                     cart: get().cart.map((item) =>
-                        item._id === productId ? { ...item, quantity: Math.max(1, item.quantity + amount) } : item
+                        item._id === productId ? { 
+                            ...item, 
+                            quantity: Math.max(1, Math.min(10, item.quantity + amount)) 
+                        } : item
                     ),
                 });
             },
 
             clearCart: () => set({ cart: [] }),
+
+            getCartTotal: () => {
+                return get().cart.reduce((total, item) => total + item.price * item.quantity, 0);
+            },
+
+            getItemCount: () => {
+                return get().cart.reduce((total, item) => total + item.quantity, 0);
+            }
         }),
         {
             name: 'nibm-canteen-storage',
