@@ -56,13 +56,13 @@ const Profile = () => {
             <div className="absolute top-[-5%] left-[-5%] w-[500px] h-[500px] bg-nibmGold opacity-10 rounded-full blur-[120px]"></div>
             
             <div className="relative w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 z-20">
-                <div className="bg-white rounded-[2.5rem] shadow-premium border border-white p-10 animate-in fade-in slide-in-from-left duration-500">
+                <div className="bg-white rounded-[2.5rem] shadow-premium border border-white p-10 animate-in fade-in slide-in-from-left duration-500 text-left">
                     <button onClick={() => navigate(userRole === 'admin' ? '/admin/dashboard' : '/menu')} className="mb-6 p-2 hover:bg-gray-100 rounded-full transition-all">
                         <ArrowLeft size={20} className="text-gray-400" />
                     </button>
                     <div className="text-center mb-8">
-                        <div className="w-16 h-16 bg-nibmBlue rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl text-white font-black text-2xl">
-                            <User size={32} />
+                        <div className="w-16 h-16 bg-nibmBlue rounded-full flex items-center justify-center mx-auto mb-4 shadow-xl text-white">
+                            <User size={32} /> 
                         </div>
                         <h2 className="text-xl font-black text-nibmBlue uppercase tracking-tight">Identity Settings</h2>
                         <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-1">{isStudent ? "Student Account" : "Admin Account"}</p>
@@ -83,7 +83,7 @@ const Profile = () => {
                     </form>
                 </div>
 
-                <div className="bg-white rounded-[2.5rem] shadow-premium border border-white p-10 animate-in fade-in slide-in-from-right duration-500 text-slate-900">
+                <div className="bg-white rounded-[2.5rem] shadow-premium border border-white p-10 animate-in fade-in slide-in-from-right duration-500 text-left">
                     <div className="flex items-center gap-4 mb-8">
                         <div className="p-3 bg-red-50 rounded-2xl text-nibmRed"><Lock size={24}/></div>
                         <div>

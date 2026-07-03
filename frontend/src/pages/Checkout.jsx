@@ -136,15 +136,18 @@ const Checkout = () => {
                             </div>
                         </div>
 
-                        <div className="space-y-4 mb-10">
+                        <div className="space-y-4 mb-10 text-left">
                             <div className="flex justify-between items-end border-b border-gray-100 pb-5">
                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em]">Payable</span>
                                 <span className="text-5xl font-black text-nibmBlue italic leading-none font-mono">Rs.{total}</span>
                             </div>
+                            <div className="flex items-center gap-3 text-[10px] text-green-600 font-bold uppercase tracking-widest bg-green-50/50 p-2 rounded-lg">
+                                <ShieldCheck size={14} /> PCI-DSS Compliant Security
+                            </div>
                         </div>
 
                         <button onClick={handleCheckout} disabled={isProcessing} className="w-full bg-nibmRed text-white font-black py-5 rounded-2xl shadow-xl shadow-red-200 hover:bg-red-700 transition-all flex items-center justify-center gap-3 uppercase tracking-[0.25em] active:scale-95 disabled:bg-gray-100 disabled:text-gray-400">
-                            {isProcessing ? <span className="animate-spin h-5 w-5 border-2 border-gray-400 border-t-gray-600 rounded-full"></span> : "Confirm Payment"}
+                            {isProcessing ? <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span> : "Confirm Payment"}
                         </button>
                     </>
                 )}
