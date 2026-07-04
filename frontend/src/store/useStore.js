@@ -6,23 +6,17 @@ export const useStore = create((set) => ({
         role: localStorage.getItem('userRole') || null,
         token: localStorage.getItem('token') || null,
     },
-    
-    cart: [],
-
+    pendingOrderCount: 0,
     setUser: (userData) => {
         localStorage.setItem('token', userData.token);
         localStorage.setItem('userName', userData.name);
         localStorage.setItem('userRole', userData.role);
         set({ user: userData });
     },
-
+    setPendingOrderCount: (count) => set({ pendingOrderCount: count }),
     logout: () => {
         localStorage.clear();
-        set({ user: { name: null, role: null, token: null }, cart: [] });
+        set({ user: { name: null, role: null, token: null }, pendingOrderCount: 0 });
         window.location.href = '/login';
-    },
-
-    addToCart: (product) => set((state) => ({ 
-        cart: [...state.cart, product] 
-    })),
+    }
 }));

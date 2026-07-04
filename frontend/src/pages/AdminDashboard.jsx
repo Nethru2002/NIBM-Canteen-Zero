@@ -8,6 +8,7 @@ import {
 import { Link } from 'react-router-dom';
 import API from '../services/api';
 import { io } from 'socket.io-client';
+import { useStore } from '../store/useStore';
 
 const AdminDashboard = () => {
     const [inventory, setInventory] = useState([]);
@@ -16,6 +17,9 @@ const AdminDashboard = () => {
     const fileInputRef = useRef(null);
     const alertAudio = useRef(new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'));
     
+    const pendingOrderCount = useStore((state) => state.pendingOrderCount);
+    const setPendingOrderCount = useStore((state) => state.setPendingOrderCount);
+
     const [isEditing, setIsEditing] = useState(false);
     const [editId, setEditId] = useState(null);
     const [formData, setFormData] = useState({ 
@@ -61,6 +65,15 @@ const AdminDashboard = () => {
         }
     }, []);
 
+    const fetchInitialCount = useCallback(async () => {
+        try {
+            const res = await API.get('/api/orders/active-count');
+            setPendingOrderCount(res.data.count);
+        } catch (err) {
+            console.error("Count Error");
+        }
+    }, [setPendingOrderCount]);
+
     useEffect(() => {
         const socket = io(process.env.REACT_APP_API_URL || "http://localhost:5000");
         
@@ -75,10 +88,15 @@ const AdminDashboard = () => {
             });
         });
 
+        socket.on('orderCountUpdate', (count) => {
+            setPendingOrderCount(count);
+        });
+
         fetchInventory(); 
         fetchOrders();
+        fetchInitialCount();
         return () => socket.disconnect();
-    }, [fetchInventory, fetchOrders]);
+    }, [fetchInventory, fetchOrders, fetchInitialCount, setPendingOrderCount]);
 
     const handleCollect = async (id) => {
         try {
@@ -128,7 +146,7 @@ const AdminDashboard = () => {
     };
 
     const handleGlobalReset = async () => {
-        if(window.confirm("Initialize new day?")) {
+        if(window.confirm("Restore all items to Available?")) {
             await API.post('/api/products/daily-reset');
             fetchInventory();
             toast.success("Inventory Restored");
@@ -166,16 +184,21 @@ const AdminDashboard = () => {
                         </div>
                     </div>
                     <div className="flex items-center gap-4">
-                        <Link to="/admin/kitchen" className="flex items-center gap-3 bg-white/10 border border-white/20 px-6 py-3 rounded-2xl hover:bg-white/20 transition-all group">
+                        <Link to="/admin/kitchen" className="relative flex items-center gap-3 bg-white/10 border border-white/20 px-6 py-3 rounded-2xl hover:bg-white/20 transition-all group text-white decoration-transparent no-underline">
                             <div className="text-right hidden md:block leading-none">
                                 <p className="text-[8px] font-black uppercase tracking-widest opacity-50 mb-1">Switch Mode</p>
                                 <p className="text-xs font-black uppercase tracking-tighter text-nibmGold">Kitchen Monitor</p>
                             </div>
                             <ChefHat className="text-nibmGold group-hover:scale-110 transition-transform" size={24} />
+                            {pendingOrderCount > 0 && (
+                                <span className="absolute -top-2 -right-2 bg-white text-[#d71920] w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shadow-xl border-2 border-[#d71920] animate-bounce">
+                                    {pendingOrderCount}
+                                </span>
+                            )}
                         </Link>
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-300" size={14} />
-                            <input type="text" placeholder="Search..." className="bg-blue-900/40 border border-blue-400/30 rounded-full pl-9 pr-4 py-2 text-xs outline-none focus:ring-2 focus:ring-nibmGold w-40 transition-all" onChange={(e) => setSearchBar(e.target.value)}/>
+                            <input type="text" placeholder="Search..." className="bg-blue-900/40 border border-blue-400/30 rounded-full pl-9 pr-4 py-2 text-xs outline-none focus:ring-2 focus:ring-nibmGold w-40 transition-all text-white" onChange={(e) => setSearchBar(e.target.value)}/>
                         </div>
                     </div>
                 </div>
@@ -191,7 +214,7 @@ const AdminDashboard = () => {
                 <div className="p-8 overflow-y-auto no-scrollbar flex-1 space-y-8 pb-32">
                     <div>
                         <div className="flex items-center justify-between mb-6 px-1">
-                            <h2 className="text-sm font-black text-nibmBlue uppercase tracking-widest flex items-center gap-2"><ShoppingBag size={16}/> Pending Pickups</h2>
+                            <h2 className="text-sm font-black text-nibmBlue uppercase tracking-widest flex items-center gap-2 text-left"><ShoppingBag size={16}/> Pending Pickups</h2>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {pendingOrders.map(order => (
@@ -211,7 +234,7 @@ const AdminDashboard = () => {
                     </div>
 
                     <div>
-                        <h2 className="text-sm font-black text-nibmBlue uppercase tracking-widest mb-6 px-1">Master Inventory</h2>
+                        <h2 className="text-sm font-black text-nibmBlue uppercase tracking-widest mb-6 px-1 text-left">Master Inventory</h2>
                         <div className="space-y-4">
                             {inventory.filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase())).map(item => (
                                 <div key={item._id} className={`flex items-center justify-between p-5 rounded-[2rem] border transition-all ${item.isAvailable ? 'bg-white border-gray-100 shadow-sm' : 'bg-gray-100 border-dashed border-gray-300 opacity-60'}`}>
@@ -228,7 +251,7 @@ const AdminDashboard = () => {
                                     <div className="flex items-center gap-2">
                                         <button onClick={() => handleEditClick(item)} className="p-2.5 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"><Edit3 size={16}/></button>
                                         <button onClick={() => handleDelete(item._id, item.name)} className="p-2.5 text-nibmRed hover:bg-red-50 rounded-xl transition-all"><Trash2 size={16}/></button>
-                                        <button onClick={() => handleToggle(item._id)} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-[10px] tracking-widest uppercase transition-all ${item.isAvailable ? 'bg-green-100 text-green-600 hover:bg-green-600 hover:text-white' : 'bg-slate-200 text-slate-500'}`}><Power size={14} /></button>
+                                        <button onClick={() => handleToggle(item._id)} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-[10px] tracking-widest uppercase transition-all ${item.isAvailable ? 'bg-green-100 text-green-600' : 'bg-slate-200 text-slate-500'}`}><Power size={14} /></button>
                                     </div>
                                 </div>
                             ))}
@@ -246,13 +269,13 @@ const AdminDashboard = () => {
                     <h2 className="text-xl font-black text-nibmBlue tracking-widest uppercase leading-none">{isEditing ? 'Update Entry' : 'Catalog Entry'}</h2>
                 </div>
 
-                <form onSubmit={handleSubmit} className="p-10 space-y-6 overflow-hidden flex-1">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1.5 text-left">
+                <form onSubmit={handleSubmit} className="px-10 pt-10 pb-20 space-y-6 overflow-y-auto no-scrollbar flex-1">
+                    <div className="grid grid-cols-2 gap-4 text-left">
+                        <div className="space-y-1.5">
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Name</label>
                             <input type="text" name="name" required className="w-full bg-gray-50 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-nibmBlue text-sm font-medium" value={formData.name} onChange={handleChange} />
                         </div>
-                        <div className="space-y-1.5 text-left">
+                        <div className="space-y-1.5">
                             <label className="flex items-center gap-1.5 text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1"><Utensils size={12} className="text-nibmBlue"/> Category</label>
                             <select name="category" className="w-full bg-gray-50 p-4 rounded-2xl outline-none font-bold text-nibmBlue text-sm appearance-none" value={formData.category} onChange={handleChange}>
                                 <option value="Snacks">Snacks</option>
@@ -268,12 +291,12 @@ const AdminDashboard = () => {
                         <textarea name="description" rows="2" required className="w-full bg-gray-50 p-4 rounded-2xl outline-none text-sm resize-none font-medium text-gray-600" value={formData.description} onChange={handleChange} />
                     </div>
 
-                    <div className="grid grid-cols-3 gap-4">
-                        <div className="space-y-1.5 text-left">
+                    <div className="grid grid-cols-3 gap-4 text-left">
+                        <div className="space-y-1.5">
                             <label className="flex items-center gap-1.5 text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1"><BadgeDollarSign size={12} className="text-nibmBlue"/> Price</label>
                             <input type="number" name="price" className="w-full bg-gray-50 p-4 rounded-2xl text-center font-black text-nibmBlue" value={formData.price} onChange={handleChange} />
                         </div>
-                        <div className="space-y-1.5 text-left">
+                        <div className="space-y-1.5">
                             <label className="flex items-center gap-1.5 text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1"><Clock size={12} className="text-nibmBlue"/> Prep</label>
                             <input type="number" name="prepTime" className="w-full bg-gray-50 p-4 rounded-2xl text-center font-black text-nibmBlue" value={formData.prepTime} onChange={handleChange} />
                         </div>
@@ -285,11 +308,11 @@ const AdminDashboard = () => {
                         </div>
                     </div>
 
-                    <div className="flex gap-4">
-                        <div className="flex-1 space-y-1.5 text-left">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Media</label>
+                    <div className="flex gap-4 text-left">
+                        <div className="flex-1 space-y-1.5">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider ml-1">Media Assets</label>
                             <button type="button" onClick={() => fileInputRef.current.click()} className={`w-full border-2 border-dashed p-4 rounded-2xl font-bold text-[10px] tracking-widest uppercase flex items-center justify-center gap-2 transition-all ${imageFile ? 'bg-blue-600 border-blue-600 text-white shadow-lg' : 'bg-blue-50 border-blue-100 text-blue-600'}`}>
-                                <Upload size={14} /> {imageFile ? 'Attached' : isEditing ? 'Update' : 'Upload'}
+                                <Upload size={14} /> {imageFile ? 'Source Attached' : isEditing ? 'Update Media' : 'Upload Image'}
                             </button>
                             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
                         </div>

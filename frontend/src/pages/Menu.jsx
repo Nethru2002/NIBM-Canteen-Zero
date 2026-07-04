@@ -4,6 +4,7 @@ import API from '../services/api';
 import ProductCard from '../components/ProductCard';
 import CartDrawer from '../components/CartDrawer';
 import { useCartStore } from '../store/useCartStore';
+import { useStore } from '../store/useStore';
 import { X, LogOut, Settings, ChevronLeft, ChevronRight, ListFilter, ArrowDownUp, BellRing, ChefHat, LayoutDashboard, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { io } from 'socket.io-client';
@@ -25,6 +26,9 @@ const Menu = () => {
 
     const toggleCart = useCartStore((state) => state.toggleCart);
     const cartCount = useCartStore((state) => state.cart.reduce((total, item) => total + item.quantity, 0));
+    
+    const pendingOrderCount = useStore((state) => state.pendingOrderCount);
+    const setPendingOrderCount = useStore((state) => state.setPendingOrderCount);
 
     const categories = ['All', 'Snacks', 'Main Meals', 'Beverages', 'Desserts'];
 
@@ -42,23 +46,14 @@ const Menu = () => {
         setTokenIndex((prev) => (prev - 1 + activeOrders.length) % activeOrders.length);
     };
 
-    const getStatusLabel = (status) => {
-        switch (status) {
-            case 'Paid': return 'Awaiting Cook';
-            case 'Preparing': return 'In Preparation';
-            case 'Ready': return 'Ready for Pickup';
-            default: return 'Processing';
-        }
-    };
-
     const fetchProducts = useCallback(async () => {
         try {
             const res = await API.get('/api/products');
             setProducts(res.data);
-        } catch (err) { 
-            console.error("Fetch Error"); 
-        } finally { 
-            setLoading(false); 
+        } catch (err) {
+            console.error("Fetch Error");
+        } finally {
+            setLoading(false);
         }
     }, []);
 
@@ -70,8 +65,8 @@ const Menu = () => {
                 const res = await API.get(`/api/orders/user/${decoded.id}`);
                 setActiveOrders(res.data);
                 if (res.data.length === 0) setShowTokenWidget(false);
-            } catch (err) { 
-                console.error("Recovery failed"); 
+            } catch (err) {
+                console.error("Recovery failed");
             }
         }
     }, []);
@@ -80,6 +75,20 @@ const Menu = () => {
         const socket = io(process.env.REACT_APP_API_URL);
         const token = localStorage.getItem('token');
         const userId = token ? JSON.parse(atob(token.split('.')[1])).id : null;
+
+        const fetchInitialCount = async () => {
+            try {
+                const res = await API.get('/api/orders/active-count');
+                setPendingOrderCount(res.data.count);
+            } catch (err) {
+                console.error("Count Error");
+            }
+        };
+        fetchInitialCount();
+
+        socket.on('orderCountUpdate', (count) => {
+            setPendingOrderCount(count);
+        });
 
         socket.on('inventoryUpdate', () => {
             fetchProducts();
@@ -105,7 +114,7 @@ const Menu = () => {
         });
 
         return () => socket.disconnect();
-    }, [fetchProducts, fetchActiveOrders]);
+    }, [fetchProducts, fetchActiveOrders, setPendingOrderCount]);
 
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -136,6 +145,15 @@ const Menu = () => {
     const userRole = localStorage.getItem('userRole');
     const firstName = userName.split(' ')[0];
 
+    const getStatusLabel = (status) => {
+        switch (status) {
+            case 'Paid': return 'Awaiting Cook';
+            case 'Preparing': return 'In Preparation';
+            case 'Ready': return 'Ready for Pickup';
+            default: return 'Processing';
+        }
+    };
+
     return (
         <div className="min-h-screen bg-[#f8fafc] font-sans overflow-x-hidden pb-24 text-slate-900">
             <CartDrawer />
@@ -149,12 +167,18 @@ const Menu = () => {
                     
                     <div className="flex items-center gap-4">
                         {userRole === 'admin' && (
-                            <div className="hidden lg:flex gap-2">
+                            <div className="hidden lg:flex gap-4">
                                 <Link to="/admin/dashboard" className="flex items-center gap-2 bg-slate-800 text-white text-[10px] font-black px-5 py-2.5 rounded-full hover:bg-slate-900 transition-all uppercase tracking-widest shadow-lg">
                                     <LayoutDashboard size={14} /> Dashboard
                                 </Link>
-                                <Link to="/admin/kitchen" className="flex items-center gap-2 bg-[#d71920] text-white text-[10px] font-black px-5 py-2.5 rounded-full hover:bg-red-700 transition-all uppercase tracking-widest shadow-lg shadow-red-200">
-                                    <ChefHat size={14} /> Kitchen
+                                <Link to="/admin/kitchen" className="relative flex items-center gap-2 bg-[#d71920] text-white text-[10px] font-black px-5 py-2.5 rounded-full hover:bg-red-700 transition-all uppercase tracking-widest shadow-lg shadow-red-200 group">
+                                    <ChefHat size={14} /> 
+                                    Kitchen
+                                    {pendingOrderCount > 0 && (
+                                        <span className="absolute -top-2 -right-2 bg-white text-[#d71920] w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shadow-xl border-2 border-[#d71920] animate-bounce">
+                                            {pendingOrderCount}
+                                        </span>
+                                    )}
                                 </Link>
                             </div>
                         )}
@@ -169,7 +193,7 @@ const Menu = () => {
                         )}
 
                         <div className="relative" ref={profileRef}>
-                            <div onClick={() => setIsProfileOpen(!isProfileOpen)} className={`h-10 w-10 bg-[#ffc600] rounded-full border-2 shadow-md flex items-center justify-center text-[#0b3d91] font-black text-sm cursor-pointer active:scale-95 ${isProfileOpen ? 'border-[#0b3d91]' : 'border-white'}`}>
+                            <div onClick={() => setIsProfileOpen(!isProfileOpen)} className={`h-10 w-10 bg-[#ffc600] rounded-full border-2 shadow-md flex items-center justify-center text-[#0b3d91] font-black text-sm cursor-pointer transition-all active:scale-95 ${isProfileOpen ? 'border-[#0b3d91]' : 'border-white'}`}>
                                 {userName.charAt(0).toUpperCase()}
                             </div>
                             {isProfileOpen && (
@@ -227,14 +251,14 @@ const Menu = () => {
                         </div>
                         <div className="flex flex-1 justify-around items-center px-2">
                             {categories.map(cat => (
-                                <button key={cat} onClick={() => setActiveCategory(cat)} className={`px-5 py-3 rounded-[1.25rem] text-[10px] font-black tracking-[0.1em] uppercase transition-all duration-300 whitespace-nowrap ${activeCategory === cat ? 'bg-[#0b3d91] text-white shadow-lg' : 'bg-transparent text-gray-400 hover:text-[#0b3d91]'}`}>
+                                <button key={cat} onClick={() => setActiveCategory(cat)} className={`px-5 py-3 rounded-[1.25rem] text-[10px] font-black tracking-[0.1em] uppercase transition-all duration-300 whitespace-nowrap ${activeCategory === cat ? 'bg-[#0b3d91] text-white shadow-lg -translate-y-0.5' : 'bg-transparent text-gray-400 hover:text-[#0b3d91]'}`}>
                                     {cat}
                                 </button>
                             ))}
                         </div>
                     </div>
                     
-                    <div className="lg:w-[350px] flex items-center gap-4 bg-white border border-gray-100 p-2 rounded-[2.5rem] shadow-premium px-8 group focus-within:ring-4 focus-within:ring-[#0b3d91]/5 transition-all">
+                    <div className="lg:w-[350px] flex items-center gap-4 bg-white border border-gray-100 p-2 rounded-[2.5rem] shadow-premium px-8 group focus-within:ring-4 focus-within:ring-[#0b3d91]/5 transition-all text-left">
                         <Search size={20} className="text-gray-300 group-focus-within:text-[#0b3d91] transition-colors" />
                         <input type="text" placeholder="Quick find..." className="bg-transparent text-[11px] font-bold text-slate-600 w-full outline-none placeholder:text-gray-300 tracking-widest uppercase" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                     </div>
@@ -258,7 +282,7 @@ const Menu = () => {
                 </div>
 
                 {loading ? (
-                    <div className="flex flex-col items-center justify-center py-20"><div className="w-14 h-14 border-4 border-[#0b3d91] border-t-[#ffc600] rounded-full animate-spin mb-4"></div><p className="text-gray-400 font-bold text-[10px] tracking-widest uppercase text-center">Syncing inventory...</p></div>
+                    <div className="flex flex-col items-center justify-center py-20"><div className="w-14 h-14 border-4 border-[#0b3d91] border-t-[#ffc600] rounded-full animate-spin mb-4"></div><p className="text-gray-400 font-bold text-[10px] tracking-widest uppercase text-center animate-pulse">Syncing inventory...</p></div>
                 ) : filteredItems.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-10">
                         {filteredItems.map((product, index) => (<ProductCard key={product._id} product={product} index={index} />))}
