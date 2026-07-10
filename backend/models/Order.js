@@ -15,6 +15,7 @@ const orderSchema = new mongoose.Schema({
     paymentId: { type: String },
     tokenID: { type: String },
     seatReleased: { type: Boolean, default: false },
+    isExtended: { type: Boolean, default: false },
     paidAt: { type: Date },
     preparingAt: { type: Date },
     readyAt: { type: Date },

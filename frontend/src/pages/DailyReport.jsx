@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import API from '../services/api';
 import { ArrowLeft, FileDown, TrendingUp, ShoppingBag, Clock, Trophy, Calendar } from 'lucide-react';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import toast from 'react-hot-toast';
 import { io } from 'socket.io-client';
 
@@ -47,7 +47,7 @@ const DailyReport = () => {
         doc.setFontSize(10);
         doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 38);
         
-        doc.autoTable({
+        autoTable(doc, {
             startY: 45,
             head: [['Operational Metric', 'Result']],
             body: [
@@ -61,7 +61,7 @@ const DailyReport = () => {
         });
 
         doc.text("SCHOLAR'S CHOICE - TOP SELLING ITEMS", 14, doc.lastAutoTable.finalY + 15);
-        doc.autoTable({
+        autoTable(doc, {
             startY: doc.lastAutoTable.finalY + 20,
             head: [['Rank', 'Product Name', 'Total Units Sold']],
             body: stats.topItems.map((i, index) => [`#${index + 1}`, i.name, i.count]),

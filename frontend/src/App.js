@@ -9,6 +9,7 @@ import Checkout from './pages/Checkout';
 import Profile from './pages/Profile';
 import KitchenMonitor from './pages/KitchenMonitor';
 import DailyReport from './pages/DailyReport';
+import OrderHistory from './pages/OrderHistory';
 
 const AdminRoute = ({ children }) => {
   const token = localStorage.getItem('token');
@@ -43,15 +44,13 @@ function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
-        
         <Route path="/menu" element={<ProtectedRoute><Menu /></ProtectedRoute>} />
         <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-
+        <Route path="/history" element={<ProtectedRoute><OrderHistory /></ProtectedRoute>} />
         <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
         <Route path="/admin/kitchen" element={<AdminRoute><KitchenMonitor /></AdminRoute>} />
         <Route path="/admin/report" element={<AdminRoute><DailyReport /></AdminRoute>} />
-
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>

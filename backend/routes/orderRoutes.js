@@ -66,6 +66,8 @@ const startSmartReleaseTimer = (order, req) => {
                 targetOrder.seatReleased = true;
                 await targetOrder.save();
                 await emitUpdate(req);
+                const io = req.app.get('socketio');
+                io.emit('orderUpdate', { userId: targetOrder.user, status: 'Expired' });
             }
         } catch (err) {
             console.error(err);
@@ -73,21 +75,37 @@ const startSmartReleaseTimer = (order, req) => {
     }, duration);
 };
 
+router.patch('/:id/release-manual', async (req, res, next) => {
+    try {
+        const order = await Order.findById(req.params.id);
+        if (!order) return res.status(404).json({ message: "Session record not found" });
+
+        order.seatReleased = true;
+        await order.save();
+        
+        await emitUpdate(req);
+        
+        const io = req.app.get('socketio');
+        io.emit('orderUpdate', { userId: order.user, status: 'Expired' });
+
+        res.json({ message: "Seat successfully released" });
+    } catch (err) {
+        next(err);
+    }
+});
+
 router.get('/admin/daily-report', async (req, res, next) => {
     try {
         const startOfDay = new Date();
         startOfDay.setHours(0, 0, 0, 0);
-
         const orders = await Order.find({
             createdAt: { $gte: startOfDay },
             status: { $ne: 'Pending' }
         });
-
         let totalRevenue = 0;
         let itemCounts = {};
         let totalPrepTime = 0;
         let fulfilledCount = 0;
-
         orders.forEach(order => {
             totalRevenue += order.totalAmount;
             order.items.forEach(item => {
@@ -99,12 +117,7 @@ router.get('/admin/daily-report', async (req, res, next) => {
                 fulfilledCount++;
             }
         });
-
-        const topItems = Object.entries(itemCounts)
-            .sort(([, a], [, b]) => b - a)
-            .slice(0, 3)
-            .map(([name, count]) => ({ name, count }));
-
+        const topItems = Object.entries(itemCounts).sort(([, a], [, b]) => b - a).slice(0, 3).map(([name, count]) => ({ name, count }));
         res.json({
             date: new Date().toLocaleDateString('en-GB'),
             revenue: totalRevenue,
@@ -112,31 +125,39 @@ router.get('/admin/daily-report', async (req, res, next) => {
             avgPrepTime: fulfilledCount > 0 ? Math.round(totalPrepTime / fulfilledCount) : 0,
             topItems
         });
-    } catch (err) {
-        next(err);
-    }
+    } catch (err) { next(err); }
 });
 
 router.get('/occupancy', async (req, res, next) => {
     try {
         const occupied = await getActiveOccupancy();
-        res.json({ 
-            occupied, 
-            total: CANTEEN_CAPACITY,
-            available: Math.max(0, CANTEEN_CAPACITY - occupied)
-        });
-    } catch (err) {
-        next(err);
-    }
+        res.json({ occupied, total: CANTEEN_CAPACITY, available: Math.max(0, CANTEEN_CAPACITY - occupied) });
+    } catch (err) { next(err); }
 });
 
 router.get('/active-count', async (req, res, next) => {
     try {
         const count = await getActiveCount();
         res.json({ count });
-    } catch (err) {
-        next(err);
-    }
+    } catch (err) { next(err); }
+});
+
+router.get('/user-history/:userId', async (req, res, next) => {
+    try {
+        const history = await Order.find({ user: req.params.userId, status: { $ne: 'Pending' } }).sort({ createdAt: -1 });
+        res.json(history);
+    } catch (err) { next(err); }
+});
+
+router.get('/user/:userId', async (req, res, next) => {
+    try {
+        const orders = await Order.find({ 
+            user: req.params.userId, 
+            status: { $in: ['Paid', 'Preparing', 'Ready', 'Collected'] },
+            seatReleased: false 
+        }).sort({ createdAt: -1 });
+        res.json(orders);
+    } catch (err) { next(err); }
 });
 
 router.post('/create', async (req, res, next) => {
@@ -150,18 +171,10 @@ router.post('/create', async (req, res, next) => {
                 throw error;
             }
         }
-        const newOrder = new Order({
-            user: userId,
-            items,
-            totalAmount,
-            orderType,
-            status: 'Pending'
-        });
+        const newOrder = new Order({ user: userId, items, totalAmount, orderType, status: 'Pending' });
         await newOrder.save();
         res.status(201).json(newOrder);
-    } catch (err) {
-        next(err);
-    }
+    } catch (err) { next(err); }
 });
 
 router.patch('/:id/status', async (req, res, next) => {
@@ -174,9 +187,7 @@ router.patch('/:id/status', async (req, res, next) => {
         if (!order) return res.status(404).json({ message: "Order not found" });
         await emitUpdate(req, order);
         res.json(order);
-    } catch (err) {
-        next(err);
-    }
+    } catch (err) { next(err); }
 });
 
 router.patch('/:id/collect', async (req, res, next) => {
@@ -186,14 +197,19 @@ router.patch('/:id/collect', async (req, res, next) => {
         order.status = 'Collected';
         order.collectedAt = new Date();
         await order.save();
-        if (order.orderType === 'Dine-In') {
-            startSmartReleaseTimer(order, req);
-        }
+        if (order.orderType === 'Dine-In') { startSmartReleaseTimer(order, req); }
+        else { order.seatReleased = true; await order.save(); }
         await emitUpdate(req, order);
         res.json({ message: "Success" });
-    } catch (err) {
-        next(err);
-    }
+    } catch (err) { next(err); }
+});
+
+router.get('/:id/status', async (req, res, next) => {
+    try {
+        const order = await Order.findById(req.params.id);
+        if (!order) return res.status(404).json({ message: "Not found" });
+        res.json({ status: order.status, tokenID: order.tokenID });
+    } catch (err) { next(err); }
 });
 
 router.patch('/:id/pay-simulate', async (req, res, next) => {
@@ -209,40 +225,7 @@ router.patch('/:id/pay-simulate', async (req, res, next) => {
         const io = req.app.get('socketio');
         io.emit('newOrderAlert', order);
         res.json({ message: "Success", order });
-    } catch (err) {
-        next(err);
-    }
-});
-
-router.get('/admin/active', async (req, res, next) => {
-    try {
-        const orders = await Order.find({ status: { $in: ['Paid', 'Preparing', 'Ready'] } }).sort({ updatedAt: 1 });
-        res.json(orders);
-    } catch (err) {
-        next(err);
-    }
-});
-
-router.get('/user/:userId', async (req, res, next) => {
-    try {
-        const orders = await Order.find({ 
-            user: req.params.userId, 
-            status: { $in: ['Paid', 'Preparing', 'Ready'] } 
-        }).sort({ createdAt: -1 });
-        res.json(orders);
-    } catch (err) {
-        next(err);
-    }
-});
-
-router.get('/:id/status', async (req, res, next) => {
-    try {
-        const order = await Order.findById(req.params.id);
-        if (!order) return res.status(404).json({ message: "Not found" });
-        res.json({ status: order.status, tokenID: order.tokenID });
-    } catch (err) {
-        next(err);
-    }
+    } catch (err) { next(err); }
 });
 
 module.exports = router;
