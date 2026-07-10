@@ -8,22 +8,18 @@ import AdminDashboard from './pages/AdminDashboard';
 import Checkout from './pages/Checkout';
 import Profile from './pages/Profile';
 import KitchenMonitor from './pages/KitchenMonitor';
+import DailyReport from './pages/DailyReport';
 
 const AdminRoute = ({ children }) => {
   const token = localStorage.getItem('token');
   const userRole = localStorage.getItem('userRole');
-
-  if (!token || userRole !== 'admin') {
-    return <Navigate to="/login" replace />;
-  }
+  if (!token || userRole !== 'admin') return <Navigate to="/login" replace />;
   return children;
 };
 
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem('token');
-  if (!token) {
-    return <Navigate to="/login" replace />;
-  }
+  if (!token) return <Navigate to="/login" replace />;
   return children;
 };
 
@@ -54,6 +50,7 @@ function App() {
 
         <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
         <Route path="/admin/kitchen" element={<AdminRoute><KitchenMonitor /></AdminRoute>} />
+        <Route path="/admin/report" element={<AdminRoute><DailyReport /></AdminRoute>} />
 
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
